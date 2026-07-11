@@ -1,0 +1,10 @@
+Single-database Alembic configuration using SQLAlchemy's async migration pattern.
+
+Create a revision:
+    alembic revision --autogenerate -m "describe change"
+
+Apply migrations:
+    alembic upgrade head
+
+Roll back one revision:
+    alembic downgrade -1

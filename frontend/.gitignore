@@ -1,0 +1,13 @@
+# Next.js
+.next/
+
+# Serwist build output
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js
+public/swe-worker-*.js.map
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/

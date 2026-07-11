@@ -1,0 +1,34 @@
+
+> ncku-student-resource-frontend@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://127.0.0.1:3000
+  - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+ ✓ Ready in 4.3s
+ ○ Compiling / ...
+ ✓ Compiled / in 8.5s (496 modules)
+ GET / 200 in 9086ms
+ ✓ Compiled in 2.1s (425 modules)
+ ✓ Compiled in 286ms (425 modules)
+ ✓ Compiled in 596ms (411 modules)
+ ✓ Compiled in 414ms (425 modules)
+ ✓ Compiled in 686ms (425 modules)
+ ✓ Compiled in 295ms (425 modules)
+ ✓ Compiled in 636ms (411 modules)
+ ✓ Compiled in 408ms (425 modules)
+ ✓ Compiled in 659ms (425 modules)
+  ▲ Next.js 14.2.35
+  - Local:        http://127.0.0.1:3000
+  - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+ ✓ Ready in 3s
+  ▲ Next.js 14.2.35
+  - Local:        http://127.0.0.1:3000
+  - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+ ✓ Ready in 3.1s

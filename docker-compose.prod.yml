@@ -1,0 +1,86 @@
+name: nckuall-prod
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: nckuall-redis
+    restart: always
+    command:
+      - sh
+      - -c
+      - >
+        redis-server
+        --requirepass "$${REDIS_PASSWORD}"
+        --appendonly yes
+        --appendfsync everysec
+        --save 900 1
+        --save 300 10
+        --save 60 10000
+        --dir /data
+    env_file:
+      - ./backend/.env.production
+    volumes:
+      - redis-data:/data
+    networks:
+      - nckuall-internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: nckuall-backend:prod
+    container_name: nckuall-backend
+    restart: always
+    env_file:
+      - ./backend/.env.production
+    environment:
+      PORT: "8000"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      APP_ENV: "production"
+      LOG_LEVEL: "INFO"
+    command:
+      - sh
+      - -c
+      - >
+        alembic upgrade head &&
+        exec gunicorn --config gunicorn.conf.py app.main:app
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_BIND:-127.0.0.1:8000}:8000"
+    networks:
+      - nckuall-internal
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:$${PORT:-8000}/health | grep -E 'ok|read_only' >/dev/null",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  nckuall-internal:
+    driver: bridge

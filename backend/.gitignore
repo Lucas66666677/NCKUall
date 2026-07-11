@@ -1,0 +1,3 @@
+# Disaster-recovery archives contain production data.
+backups/
+*.tar.gz

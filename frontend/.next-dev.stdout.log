@@ -1,0 +1,14 @@
+
+> ncku-student-resource-frontend@0.1.0 dev
+> next dev -p 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ○ (serwist) Serwist is disabled.
+ ○ (serwist) Serwist is disabled.
+ ✓ Ready in 5.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 16.7s (1036 modules)
+[?25h
