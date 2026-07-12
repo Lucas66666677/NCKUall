@@ -9,12 +9,24 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Session, sessionmaker
 
 
+def normalize_database_url(database_url: str) -> str:
+    """Force SQLAlchemy to use psycopg 3 for both sync and async engines."""
+
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    return database_url
+
+
 DEFAULT_DATABASE_URL = "postgresql+psycopg://postgres:postgres@localhost:5432/nckuall"
-DATABASE_URL = getenv(
-    "DATABASE_URL",
-    DEFAULT_DATABASE_URL,
+DATABASE_URL = normalize_database_url(
+    getenv(
+        "DATABASE_URL",
+        DEFAULT_DATABASE_URL,
+    )
 )
-DATABASE_READ_URL = getenv("DATABASE_READ_URL", DATABASE_URL)
+DATABASE_READ_URL = normalize_database_url(getenv("DATABASE_READ_URL", DATABASE_URL))
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 POOL_SIZE = int(getenv("DB_POOL_SIZE", "20"))
