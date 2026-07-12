@@ -33,9 +33,15 @@ function buildContentSecurityPolicy(nonce: string) {
 
   const campusSources = ["https://ncku.edu.tw", "https://*.ncku.edu.tw"];
   const vercelSources = ["https://vercel.app", "https://*.vercel.app"];
+  const backendSources = ["https://nckuall-api.onrender.com"];
   const supabaseSources = [
+    "https://ebabyscelfctvvrokijy.supabase.co",
     "https://*.supabase.co",
     "wss://*.supabase.co",
+  ];
+  const localTestSources = [
+    "http://localhost:3000",
+    "http://127.0.0.1:10000",
   ];
   const googleSources = [
     "https://accounts.google.com",
@@ -69,9 +75,11 @@ function buildContentSecurityPolicy(nonce: string) {
     ...configuredSources,
     ...campusSources,
     ...vercelSources,
+    ...backendSources,
     ...supabaseSources,
     ...googleSources,
     ...aiSources,
+    ...localTestSources,
     ...devSources,
   ];
   const scriptSources = [
@@ -82,6 +90,8 @@ function buildContentSecurityPolicy(nonce: string) {
     ...configuredScriptSources,
     ...campusSources,
     ...vercelSources,
+    ...backendSources,
+    "https://ebabyscelfctvvrokijy.supabase.co",
     "https://*.supabase.co",
     "https://accounts.google.com",
     "https://*.googleapis.com",
@@ -102,6 +112,7 @@ function buildContentSecurityPolicy(nonce: string) {
       "blob:",
       ...campusSources,
       ...vercelSources,
+      "https://ebabyscelfctvvrokijy.supabase.co",
       "https://*.supabase.co",
       ...googleSources,
     ].join(" "),
