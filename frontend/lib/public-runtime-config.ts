@@ -1,7 +1,7 @@
-const CANONICAL_RENDER_API_ORIGIN = "https://nckuall-api.onrender.com";
+const CANONICAL_RENDER_API_ORIGIN = "https://nckuall.onrender.com";
 const LEGACY_RENDER_ORIGINS = new Set([
-  "https://nckuall.onrender.com",
-  "wss://nckuall.onrender.com",
+  "https://nckuall-api.onrender.com",
+  "wss://nckuall-api.onrender.com",
 ]);
 
 function normalizeKnownBackendOrigin(value: string): string {
