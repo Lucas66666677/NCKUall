@@ -25,6 +25,10 @@ function normalizeBackendOrigin(value: string): string {
       url.hash = "";
     }
 
+    if (url.pathname === "/api" || url.pathname === "/api/") {
+      url.pathname = "";
+    }
+
     return url.toString().replace(/\/+$/, "");
   } catch {
     return value.replace(/\/+$/, "");

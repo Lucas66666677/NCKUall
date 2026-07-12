@@ -50,12 +50,10 @@ async function withLocalFallback<T>(
   try {
     return await operation();
   } catch (error) {
-    // A production build should fail rather than cache an empty dataset for 24h.
-    if (process.env.VERCEL === "1") {
-      throw error;
-    }
     console.warn(
-      `[server-data] ${resourceName} unavailable; using local fallback.`,
+      `[server-data] ${resourceName} unavailable; using fallback. ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
     return fallback;
   }

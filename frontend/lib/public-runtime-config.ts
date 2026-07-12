@@ -11,8 +11,13 @@ function normalizeKnownBackendOrigin(value: string): string {
       const canonical = new URL(CANONICAL_RENDER_API_ORIGIN);
       url.protocol = canonical.protocol;
       url.host = canonical.host;
-      return url.toString().replace(/\/$/, "");
     }
+
+    if (url.pathname === "/api" || url.pathname === "/api/") {
+      url.pathname = "";
+    }
+
+    return url.toString().replace(/\/+$/, "");
   } catch {
     return value;
   }
