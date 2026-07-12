@@ -19,6 +19,8 @@ export function NckuReviewComposer() {
   const [locationName, setLocationName] = useState("");
   const [area, setArea] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [isAuthActionLoading, setIsAuthActionLoading] = useState(false);
 
   const email = user?.email?.toLowerCase() ?? "";
   const isNckuUser =
@@ -28,23 +30,47 @@ export function NckuReviewComposer() {
 
   async function signInWithGoogle() {
     if (!supabase) {
+      setAuthMessage("Supabase Auth 尚未設定，請檢查前端環境變數。");
       return;
     }
 
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    setAuthMessage(null);
+    setIsAuthActionLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        setAuthMessage(`Google 登入啟動失敗：${error.message}`);
+      }
+    } catch {
+      setAuthMessage("Google 登入啟動失敗，請稍後再試。");
+    } finally {
+      setIsAuthActionLoading(false);
+    }
   }
 
   async function signOut() {
     if (!supabase) {
+      setAuthMessage("Supabase Auth 尚未設定，無法登出。");
       return;
     }
 
-    await supabase.auth.signOut();
+    setAuthMessage(null);
+    setIsAuthActionLoading(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setAuthMessage(`登出失敗：${error.message}`);
+      }
+    } catch {
+      setAuthMessage("登出失敗，請稍後再試。");
+    } finally {
+      setIsAuthActionLoading(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -114,10 +140,19 @@ export function NckuReviewComposer() {
         <AuthButton
           email={email}
           isAuthLoading={isAuthLoading}
+          isAuthActionLoading={isAuthActionLoading}
           onSignIn={signInWithGoogle}
           onSignOut={signOut}
         />
       </div>
+
+      {authMessage && (
+        <Notice
+          icon={<LockKeyhole className="h-4 w-4" />}
+          text={authMessage}
+          tone="warning"
+        />
+      )}
 
       {!supabase && (
         <Notice
@@ -226,13 +261,15 @@ export function NckuReviewComposer() {
 function AuthButton({
   email,
   isAuthLoading,
+  isAuthActionLoading,
   onSignIn,
   onSignOut,
 }: {
   email: string;
   isAuthLoading: boolean;
-  onSignIn: () => void;
-  onSignOut: () => void;
+  isAuthActionLoading: boolean;
+  onSignIn: () => Promise<void>;
+  onSignOut: () => Promise<void>;
 }) {
   if (isAuthLoading) {
     return <span className="text-sm text-slate-500">登入狀態確認中...</span>;
@@ -243,9 +280,10 @@ function AuthButton({
       <button
         type="button"
         onClick={onSignOut}
+        disabled={isAuthActionLoading}
         className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800"
       >
-        登出 {email}
+        {isAuthActionLoading ? "處理中..." : `登出 ${email}`}
       </button>
     );
   }
@@ -254,10 +292,11 @@ function AuthButton({
     <button
       type="button"
       onClick={onSignIn}
-      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-campus px-4 text-sm font-semibold text-white"
+      disabled={isAuthActionLoading}
+      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-campus px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
     >
       <LogIn className="h-4 w-4" />
-      使用 Google 登入
+      {isAuthActionLoading ? "登入中..." : "使用 Google 登入"}
     </button>
   );
 }

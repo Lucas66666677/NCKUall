@@ -21,6 +21,7 @@ const MAX_VISIBLE_NOTIFICATIONS = 3;
 const AUTO_DISMISS_MS = 10_000;
 const HEARTBEAT_MS = 25_000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+const INITIAL_CONNECT_DELAY_MS = 250;
 
 type NotificationKind = "review.approved" | "event.created";
 
@@ -110,6 +111,7 @@ export function useRealtimeNotifications(departmentId: string) {
     let reconnectAttempt = 0;
     let reconnectTimer: number | null = null;
     let heartbeatTimer: number | null = null;
+    let initialConnectTimer: number | null = null;
     let socket: WebSocket | null = null;
 
     const clearConnectionTimers = () => {
@@ -120,6 +122,10 @@ export function useRealtimeNotifications(departmentId: string) {
       if (heartbeatTimer !== null) {
         window.clearInterval(heartbeatTimer);
         heartbeatTimer = null;
+      }
+      if (initialConnectTimer !== null) {
+        window.clearTimeout(initialConnectTimer);
+        initialConnectTimer = null;
       }
     };
 
@@ -235,18 +241,28 @@ export function useRealtimeNotifications(departmentId: string) {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    connect();
+    initialConnectTimer = window.setTimeout(() => {
+      initialConnectTimer = null;
+      connect();
+    }, INITIAL_CONNECT_DELAY_MS);
 
     return () => {
       disposed = true;
       clearConnectionTimers();
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      if (
-        socket?.readyState === WebSocket.OPEN ||
-        socket?.readyState === WebSocket.CONNECTING
-      ) {
-        socket.close(1000, "component_unmounted");
+      const currentSocket = socket;
+      if (currentSocket) {
+        currentSocket.onmessage = null;
+        currentSocket.onerror = null;
+        currentSocket.onclose = null;
+        if (currentSocket.readyState === WebSocket.OPEN) {
+          currentSocket.close(1000, "component_unmounted");
+        } else if (currentSocket.readyState === WebSocket.CONNECTING) {
+          currentSocket.onopen = () => {
+            currentSocket.close(1000, "component_unmounted");
+          };
+        }
       }
       socket = null;
     };
