@@ -20,6 +20,7 @@ from app.security.cors import (
     get_cors_expose_headers,
     get_cors_headers,
     get_cors_methods,
+    get_cors_origin_regex,
     get_cors_origins,
 )
 from app.security.exceptions import install_exception_handlers
@@ -167,6 +168,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
+    allow_origin_regex=get_cors_origin_regex(),
     allow_credentials=cors_allow_credentials(),
     allow_methods=get_cors_methods(),
     allow_headers=get_cors_headers(),

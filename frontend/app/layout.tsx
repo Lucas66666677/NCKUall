@@ -66,6 +66,9 @@ export function generateMetadata(): Metadata {
       statusBarStyle: "default",
       title: "NCKUall",
     },
+    other: {
+      "mobile-web-app-capable": "yes",
+    },
     formatDetection: {
       telephone: false,
     },

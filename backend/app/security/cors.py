@@ -4,6 +4,7 @@ from os import getenv
 
 
 DEFAULT_DEV_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
+DEFAULT_CORS_ORIGIN_REGEX = r"^https://[a-z0-9-]+\.vercel\.app$"
 DEFAULT_CORS_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
 DEFAULT_CORS_HEADERS = (
     "Accept",
@@ -49,6 +50,10 @@ def get_cors_origins() -> list[str]:
             "when CORS_ALLOW_CREDENTIALS=true. Set explicit frontend origins."
         )
     return origins
+
+
+def get_cors_origin_regex() -> str | None:
+    return getenv("CORS_ORIGIN_REGEX", DEFAULT_CORS_ORIGIN_REGEX).strip() or None
 
 
 def get_cors_methods() -> list[str]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from os import getenv
+import re
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -29,13 +30,32 @@ def _allowed_origins() -> set[str]:
     }
 
 
+def _allowed_origin_regex() -> str | None:
+    return getenv(
+        "CORS_ORIGIN_REGEX",
+        r"^https://[a-z0-9-]+\.vercel\.app$",
+    ).strip() or None
+
+
+def _is_allowed_origin(origin: str | None) -> bool:
+    if not origin:
+        return True
+
+    normalized_origin = origin.rstrip("/")
+    if normalized_origin in _allowed_origins():
+        return True
+
+    origin_regex = _allowed_origin_regex()
+    return bool(origin_regex and re.fullmatch(origin_regex, normalized_origin))
+
+
 @router.websocket("/ws/notifications")
 async def websocket_notifications(
     websocket: WebSocket,
     department_id: str | None = Query(default=None, max_length=120),
 ) -> None:
     origin = websocket.headers.get("origin")
-    if origin and origin.rstrip("/") not in _allowed_origins():
+    if not _is_allowed_origin(origin):
         await websocket.close(code=1008, reason="origin_not_allowed")
         return
 
