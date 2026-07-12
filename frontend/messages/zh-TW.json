@@ -90,6 +90,7 @@
   "courses.hardness.pending": "待觀察",
   "courses.expand": "展開 {title} 詳細資訊",
   "courses.collapse": "收合 {title} 詳細資訊",
+  "courses.viewDetail": "查看完整課程頁",
   "careers.eyebrow": "職涯規劃",
   "careers.title": "系所資源與升學地圖",
   "careers.description": "整合教授實驗室、海外交換、雙聯學位、預研與推甄資訊，先看資料，再請 AI 幫你追問。",

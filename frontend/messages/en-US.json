@@ -90,6 +90,7 @@
   "courses.hardness.pending": "Pending",
   "courses.expand": "Expand details for {title}",
   "courses.collapse": "Collapse details for {title}",
+  "courses.viewDetail": "View full course page",
   "careers.eyebrow": "Careers",
   "careers.title": "Department Resources and Graduate Pathways",
   "careers.description": "Explore labs, exchange, dual degrees, pre-master options, and admissions information before asking AI follow-ups.",

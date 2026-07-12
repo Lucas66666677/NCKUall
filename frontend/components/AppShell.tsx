@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { AIAssistantSidebar } from "@/components/AIAssistant";
+import { AuthStatusButton } from "@/components/AuthStatusButton";
 import {
   type Department,
   useAppContext,
@@ -126,6 +127,12 @@ export function AppShell() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <div className="hidden sm:block">
+              <AuthStatusButton />
+            </div>
+            <div className="sm:hidden">
+              <AuthStatusButton compact />
+            </div>
             <ThemeSwitcher />
             <LanguageSwitcher />
             <button

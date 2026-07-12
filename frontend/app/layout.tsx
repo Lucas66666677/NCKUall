@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { AppProvider } from "@/components/AppContext";
+import { GlobalAIAssistant } from "@/components/GlobalAIAssistant";
 import { OfflineToast } from "@/components/OfflineToast";
 import { RealtimeNotifications } from "@/components/RealtimeNotifications";
+import { SiteChrome } from "@/components/SiteChrome";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { getDepartments } from "@/lib/server-data";
 import "./globals.css";
@@ -127,6 +129,8 @@ export default async function RootLayout({
           <AppProvider initialDepartments={initialDepartments}>
             <OfflineToast />
             <RealtimeNotifications />
+            <SiteChrome />
+            <GlobalAIAssistant />
             {children}
           </AppProvider>
         </ThemeProvider>

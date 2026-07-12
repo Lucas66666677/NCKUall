@@ -2,8 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, SlidersHorizontal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { useAppContext } from "@/components/AppContext";
 import {
@@ -382,6 +388,13 @@ function CourseDetailPanel({ course, panelId }: { course: Course; panelId: strin
             </div>
           </dl>
           {course.description && <p className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">{course.description}</p>}
+          <Link
+            href={`/courses/${course.id}`}
+            className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-campus px-4 text-sm font-semibold text-white transition hover:bg-campus/90"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            {t("courses.viewDetail")}
+          </Link>
         </aside>
       </div>
     </div>
