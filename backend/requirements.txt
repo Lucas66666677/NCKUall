@@ -19,3 +19,4 @@ langchain-google-genai>=2.0.0
 PyJWT>=2.8.0
 FlashRank>=0.2.10,<0.3.0
 reportlab>=4.2.0
+psycopg2-binary>=2.9.9
