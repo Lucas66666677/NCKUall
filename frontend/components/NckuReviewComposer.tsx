@@ -7,6 +7,7 @@ import { LockKeyhole, LogIn, Send, ShieldCheck } from "lucide-react";
 import { USER_ROLES, useAppContext } from "@/components/AppContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 type ReviewType = "rental_warning" | "rental_recommendation" | "food_recommendation" | "protein_meal_prep" | "other";
 
@@ -29,7 +30,18 @@ export function NckuReviewComposer() {
   const canSubmit = Boolean(supabase && user && isNckuUser && title.trim() && content.trim() && !isSubmitting);
 
   async function signInWithGoogle() {
+    console.log("[NCKUall Auth] Google login button clicked.");
+
     if (!supabase) {
+      console.error(
+        "[NCKUall Auth] Supabase client is not available.",
+        {
+          hasSupabaseUrl: Boolean(SUPABASE_URL),
+          hasSupabaseAnonKey: Boolean(
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          ),
+        },
+      );
       setAuthMessage("Supabase Auth 尚未設定，請檢查前端環境變數。");
       return;
     }
@@ -37,16 +49,29 @@ export function NckuReviewComposer() {
     setAuthMessage(null);
     setIsAuthActionLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          skipBrowserRedirect: true,
         },
       });
       if (error) {
+        console.error("[NCKUall Auth] Google OAuth failed to start.", error);
         setAuthMessage(`Google 登入啟動失敗：${error.message}`);
+        return;
       }
-    } catch {
+
+      if (data.url) {
+        console.log("[NCKUall Auth] Redirecting to Google OAuth.");
+        window.location.assign(data.url);
+        return;
+      }
+
+      console.error("[NCKUall Auth] Google OAuth returned no redirect URL.");
+      setAuthMessage("Google 登入啟動失敗：Supabase 沒有回傳登入網址。");
+    } catch (error) {
+      console.error("[NCKUall Auth] Unexpected Google login error.", error);
       setAuthMessage("Google 登入啟動失敗，請稍後再試。");
     } finally {
       setIsAuthActionLoading(false);

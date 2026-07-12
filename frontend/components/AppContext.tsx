@@ -71,6 +71,25 @@ const defaultDepartment: Department = {
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
+function createSafeSupabaseClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    console.warn(
+      "[NCKUall Auth] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+    );
+    return null;
+  }
+
+  try {
+    return createBrowserClient(url, anonKey);
+  } catch (error) {
+    console.error("[NCKUall Auth] Failed to initialize Supabase client.", error);
+    return null;
+  }
+}
+
 function getUserRole(user: User | null): UserRole {
   if (!user) {
     return USER_ROLES.GUEST;
@@ -135,11 +154,10 @@ export function AppProvider({
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
 
-  const supabase = useMemo<SupabaseClient | null>(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    return url && anonKey ? createBrowserClient(url, anonKey) : null;
-  }, []);
+  const supabase = useMemo<SupabaseClient | null>(
+    () => createSafeSupabaseClient(),
+    [],
+  );
 
   const setCurrentDepartment = useCallback<
     Dispatch<SetStateAction<Department>>
