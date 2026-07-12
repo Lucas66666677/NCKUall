@@ -66,12 +66,12 @@ function getWebSocketUrl(departmentId: string): string {
   const configuredWebSocketUrl = process.env.NEXT_PUBLIC_WS_URL;
   const configuredApiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   const source =
-    configuredWebSocketUrl ??
     configuredApiUrl ??
+    configuredWebSocketUrl ??
     window.location.origin;
   const url = new URL(source, window.location.origin);
 
-  if (!configuredWebSocketUrl) {
+  if (configuredApiUrl || !configuredWebSocketUrl) {
     url.pathname = "/ws/notifications";
     url.search = "";
   }

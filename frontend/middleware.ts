@@ -33,7 +33,11 @@ function buildContentSecurityPolicy(nonce: string) {
 
   const campusSources = ["https://ncku.edu.tw", "https://*.ncku.edu.tw"];
   const vercelSources = ["https://vercel.app", "https://*.vercel.app"];
-  const backendSources = ["https://nckuall-api.onrender.com"];
+  const backendSources = [
+    "https://nckuall-api.onrender.com",
+    "wss://nckuall.onrender.com",
+    "wss://nckuall-api.onrender.com",
+  ];
   const supabaseSources = [
     "https://ebabyscelfctvvrokijy.supabase.co",
     "https://*.supabase.co",
