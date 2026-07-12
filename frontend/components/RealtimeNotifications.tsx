@@ -16,6 +16,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { useAppContext } from "@/components/AppContext";
+import { getPublicWebSocketUrl } from "@/lib/public-runtime-config";
 
 const MAX_VISIBLE_NOTIFICATIONS = 3;
 const AUTO_DISMISS_MS = 10_000;
@@ -64,24 +65,7 @@ function isNotificationEnvelope(value: unknown): value is NotificationEnvelope {
 }
 
 function getWebSocketUrl(departmentId: string): string {
-  const configuredWebSocketUrl = process.env.NEXT_PUBLIC_WS_URL;
-  const configuredApiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const source =
-    configuredApiUrl ??
-    configuredWebSocketUrl ??
-    window.location.origin;
-  const url = new URL(source, window.location.origin);
-
-  if (configuredApiUrl || !configuredWebSocketUrl) {
-    url.pathname = "/ws/notifications";
-    url.search = "";
-  }
-
-  if (url.protocol === "http:") {
-    url.protocol = "ws:";
-  } else if (url.protocol === "https:") {
-    url.protocol = "wss:";
-  }
+  const url = getPublicWebSocketUrl();
 
   if (departmentId) {
     url.searchParams.set("department_id", departmentId);

@@ -26,14 +26,14 @@ import {
 import { USER_ROLES, useAppContext } from "@/components/AppContext";
 import { FlagReviewModal } from "@/components/FlagReviewModal";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
 import type {
   LifeReview,
   LifeReviewType,
 } from "@/lib/api-types";
 
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getPublicApiBaseUrl();
 
 type ReviewType = LifeReviewType;
 type ReviewFilter = "all" | LifeReviewType;

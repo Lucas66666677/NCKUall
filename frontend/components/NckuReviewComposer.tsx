@@ -5,8 +5,9 @@ import type { ReactNode } from "react";
 import { LockKeyhole, LogIn, Send, ShieldCheck } from "lucide-react";
 
 import { USER_ROLES, useAppContext } from "@/components/AppContext";
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getPublicApiBaseUrl();
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 type ReviewType = "rental_warning" | "rental_recommendation" | "food_recommendation" | "protein_meal_prep" | "other";

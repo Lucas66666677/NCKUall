@@ -4,9 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Flag, Loader2, ShieldAlert, X } from "lucide-react";
 
 import { useAppContext } from "@/components/AppContext";
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getPublicApiBaseUrl();
 
 export type FlagReason =
   | "privacy_attack"

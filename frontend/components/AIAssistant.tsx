@@ -5,8 +5,9 @@ import dynamic from "next/dynamic";
 import { Bot, MessageSquareText, Send, X } from "lucide-react";
 
 import { useAppContext } from "@/components/AppContext";
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getPublicApiBaseUrl();
 const CHAT_API_URL = `${API_BASE_URL}/api/chat`;
 const CHAT_SESSION_STORAGE_KEY = "ncku_ai_chat_session_id";
 

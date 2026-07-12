@@ -11,13 +11,13 @@ import {
 } from "lucide-react";
 
 import { useAppContext } from "@/components/AppContext";
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
 import type {
   RecommendationItem,
   RecommendationResponse,
 } from "@/lib/api-types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getPublicApiBaseUrl();
 
 const resourceLabels = {
   course: "課程",

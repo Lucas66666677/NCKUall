@@ -16,8 +16,9 @@ import {
 import { AIAssistantSidebar } from "@/components/AIAssistant";
 import { useAppContext } from "@/components/AppContext";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = getPublicApiBaseUrl();
 
 type CareerResourceType =
   | "exchange"

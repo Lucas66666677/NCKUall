@@ -6,6 +6,7 @@ import type {
   LifeReview,
   LifeReviewType,
 } from "@/lib/api-types";
+import { getServerApiBaseUrl } from "@/lib/server-runtime-config";
 
 export const DAY_IN_SECONDS = 86_400;
 export const CACHE_TAGS = {
@@ -15,11 +16,7 @@ export const CACHE_TAGS = {
 } as const;
 
 function getApiBaseUrl() {
-  return (
-    process.env.API_BASE_URL ??
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    "http://127.0.0.1:8000"
-  ).replace(/\/+$/, "");
+  return getServerApiBaseUrl();
 }
 
 async function fetchCachedJson<T>(
