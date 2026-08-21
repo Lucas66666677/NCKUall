@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.controllers import chat as chat_controller
 from app.models import CareerDocumentChunk, ChatHistory, Department
+from app.retrieval import agentic as agentic_retrieval
 
 
 pytestmark = pytest.mark.integration
@@ -48,8 +49,7 @@ async def test_chat_retrieves_department_chunk_and_returns_citations(
     )
     await db_session.commit()
 
-    embedding_model = Mock()
-    embedding_model.aembed_query = AsyncMock(return_value=EMBEDDING)
+    embed_query = AsyncMock(return_value=EMBEDDING)
     chat_model = Mock()
     chat_model.ainvoke = AsyncMock(
         return_value=SimpleNamespace(
@@ -57,9 +57,20 @@ async def test_chat_retrieves_department_chunk_and_returns_citations(
         )
     )
     monkeypatch.setattr(
-        chat_controller,
-        "get_embedding_model",
-        lambda: embedding_model,
+        agentic_retrieval,
+        "embed_query",
+        embed_query,
+    )
+    monkeypatch.setattr(
+        agentic_retrieval,
+        "route_intent",
+        AsyncMock(
+            return_value=agentic_retrieval.IntentDecision(
+                intent="career",
+                tools=("career",),
+                reason="integration_test",
+            )
+        ),
     )
     monkeypatch.setattr(
         chat_controller,
@@ -67,7 +78,7 @@ async def test_chat_retrieves_department_chunk_and_returns_citations(
         lambda: chat_model,
     )
     monkeypatch.setattr(
-        chat_controller,
+        agentic_retrieval,
         "rerank_chunks",
         AsyncMock(
             side_effect=lambda _query, chunks, *, limit: chunks[:limit]
@@ -104,7 +115,7 @@ async def test_chat_retrieves_department_chunk_and_returns_citations(
             "category": "lab_project",
         },
     }
-    embedding_model.aembed_query.assert_awaited_once_with(
+    embed_query.assert_awaited_once_with(
         "王教授實驗室的專題規定是什麼？"
     )
     chat_model.ainvoke.assert_awaited_once()
