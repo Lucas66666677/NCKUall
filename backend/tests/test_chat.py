@@ -30,23 +30,22 @@ async def test_chat_retrieves_department_chunk_and_returns_citations(
     )
     db_session.add(department)
     await db_session.flush()
-    db_session.add(
-        CareerDocumentChunk(
-            department_id=department.id,
-            source_type="department_html",
-            source_url="https://dps.ncku.edu.tw/lab/example",
-            source_title="光電系王教授實驗室",
-            category="lab_project",
-            chunk_index=0,
-            content="王教授實驗室專題生每週需參加一次研究會議，並完成期末成果報告。",
-            metadata_json={
-                "department_code": "DPS",
-                "department_name": "光電科學與工程學系",
-                "category": "lab_project",
-            },
-            embedding=EMBEDDING,
-        )
+    career_chunk = CareerDocumentChunk(
+        department_id=department.id,
+        source_type="department_html",
+        source_url="https://dps.ncku.edu.tw/lab/example",
+        source_title="光電系王教授實驗室",
+        category="lab_project",
+        chunk_index=0,
+        content="王教授實驗室專題生每週需參加一次研究會議，並完成期末成果報告。",
+        metadata_json={
+            "department_code": "DPS",
+            "department_name": "光電科學與工程學系",
+            "category": "lab_project",
+        },
+        embedding=EMBEDDING,
     )
+    db_session.add(career_chunk)
     await db_session.commit()
 
     embed_query = AsyncMock(return_value=EMBEDDING)
@@ -101,6 +100,7 @@ async def test_chat_retrieves_department_chunk_and_returns_citations(
     assert "每週需參加研究會議" in body["answer"]
     assert len(body["citations"]) == 1
     assert body["citations"][0] == {
+        "resource_id": str(career_chunk.id),
         "source_title": "光電系王教授實驗室",
         "source_url": "https://dps.ncku.edu.tw/lab/example",
         "source_type": "department_html",
