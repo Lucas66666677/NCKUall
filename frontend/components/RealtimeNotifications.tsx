@@ -132,8 +132,6 @@ export function useRealtimeNotifications(departmentId: string) {
       autoDismissTimers.current.set(notification.id, timer);
     };
 
-    let connect: () => void;
-
     const scheduleReconnect = () => {
       if (
         disposed ||
@@ -155,7 +153,7 @@ export function useRealtimeNotifications(departmentId: string) {
       }, exponentialDelay + jitter);
     };
 
-    connect = () => {
+    function connect() {
       if (
         disposed ||
         !navigator.onLine ||
@@ -213,7 +211,7 @@ export function useRealtimeNotifications(departmentId: string) {
       } catch {
         scheduleReconnect();
       }
-    };
+    }
 
     const handleOnline = () => {
       reconnectAttempt = 0;

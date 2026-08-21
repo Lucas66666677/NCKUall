@@ -317,7 +317,6 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             <CitationBadge
               key={`${citation.source_url ?? citation.source_type}-${citation.chunk_index}-${index}`}
               citation={citation}
-              index={index}
               sourceLabel={t("ai.citation", { index: index + 1 })}
             />
           ))}
@@ -329,11 +328,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 
 function CitationBadge({
   citation,
-  index,
   sourceLabel,
 }: {
   citation: Citation;
-  index: number;
   sourceLabel: string;
 }) {
   const label = citation.source_title || citation.department || citation.source_type;

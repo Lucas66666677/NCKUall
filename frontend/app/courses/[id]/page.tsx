@@ -13,15 +13,16 @@ import { getCourse } from "@/lib/course-api";
 
 
 type CoursePageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
 export async function generateMetadata({
   params,
 }: CoursePageProps): Promise<Metadata> {
-  const course = await getCourse(params.id);
+  const { id } = await params;
+  const course = await getCourse(id);
   if (!course) {
     return {
       title: "找不到課程",
@@ -63,7 +64,8 @@ export async function generateMetadata({
 }
 
 export default async function CourseDetailPage({ params }: CoursePageProps) {
-  const course = await getCourse(params.id);
+  const { id } = await params;
+  const course = await getCourse(id);
   if (!course) {
     notFound();
   }

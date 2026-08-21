@@ -24,7 +24,7 @@ export function generateMetadata(): Metadata {
       template: "%s | NCKUall",
     },
     description,
-    applicationName: "NCKUall",
+    applicationName: "NCKUall by Lucirel",
     manifest: "/manifest.json",
     keywords: [
       "成功大學",
@@ -100,7 +100,7 @@ export function generateMetadata(): Metadata {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0f766e" },
+    { media: "(prefers-color-scheme: light)", color: "#1d4ed8" },
     { media: "(prefers-color-scheme: dark)", color: "#081411" },
   ],
   colorScheme: "light dark",
@@ -112,7 +112,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const initialDepartments = await getDepartments();
-  const nonce = headers().get("x-nonce") ?? undefined;
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html lang="zh-Hant" suppressHydrationWarning>

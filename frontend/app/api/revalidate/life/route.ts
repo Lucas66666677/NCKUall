@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  revalidateTag(CACHE_TAGS.lifeReviews);
+  revalidateTag(CACHE_TAGS.lifeReviews, "max");
   revalidatePath("/life");
 
   return NextResponse.json(
