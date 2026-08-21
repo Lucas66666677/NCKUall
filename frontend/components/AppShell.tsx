@@ -7,7 +7,6 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   ChevronDown,
-  Home,
   LibraryBig,
   Menu,
   Sparkles,
@@ -25,6 +24,7 @@ import { NckuReviewComposer } from "@/components/NckuReviewComposer";
 import { SearchAutoComplete } from "@/components/SearchAutoComplete";
 import { RecommendationCarousel } from "@/components/RecommendationCarousel";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LucirelProductBrand } from "@/components/LucirelProductBrand";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { TrendingPanel } from "@/components/TrendingPanel";
 
@@ -96,13 +96,7 @@ export function AppShell() {
             href="/"
             className="flex min-w-0 items-center gap-3 text-left"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-campus text-white shadow-sm">
-              <Home className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-base font-bold tracking-normal text-ink dark:text-slate-100">NCKU Hub</span>
-              <span className="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">{t("app.logoSubtitle")}</span>
-            </span>
+            <LucirelProductBrand />
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label={t("nav.aria.main")}>

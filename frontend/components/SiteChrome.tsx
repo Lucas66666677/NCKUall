@@ -5,13 +5,13 @@ import { usePathname } from "next/navigation";
 import {
   BriefcaseBusiness,
   CalendarDays,
-  Home,
   LibraryBig,
   Utensils,
 } from "lucide-react";
 
 import { AuthStatusButton } from "@/components/AuthStatusButton";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LucirelProductBrand } from "@/components/LucirelProductBrand";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useAppContext } from "@/components/AppContext";
 
@@ -34,17 +34,7 @@ export function SiteChrome() {
     <header className="sticky top-0 z-40 border-b border-white/60 bg-white/85 shadow-sm backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/85">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-campus text-white shadow-sm">
-            <Home className="h-5 w-5" aria-hidden="true" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-base font-bold text-ink dark:text-slate-100">
-              NCKUall
-            </span>
-            <span className="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">
-              成大資源整合平台
-            </span>
-          </span>
+          <LucirelProductBrand />
         </Link>
 
         <nav

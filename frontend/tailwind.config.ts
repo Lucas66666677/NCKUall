@@ -9,13 +9,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#17211f",
-        campus: "#0f766e",
-        brick: "#b45309",
-        mist: "#f5f7f7",
+        ink: "#15171c",
+        campus: "#1d4ed8",
+        brick: "#0f766e",
+        mist: "#f7f5ef",
       },
       boxShadow: {
-        soft: "0 18px 45px rgba(23, 33, 31, 0.12)",
+        soft: "0 18px 45px rgba(29, 78, 216, 0.1)",
       },
     },
   },

@@ -42,7 +42,7 @@ export class CareersPage {
     await expect(card).toBeVisible();
     await card
       .getByRole("button", {
-        name: "詢問 AI 實驗室評價",
+        name: `詢問 AI 關於 ${professorName} 實驗室評價`,
         exact: true,
       })
       .click();
