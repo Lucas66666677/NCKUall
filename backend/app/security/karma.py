@@ -192,7 +192,14 @@ async def create_life_review_upvote(
     voter: AuthUser,
 ) -> LifeReview | None:
     voter_profile = await ensure_user_profile(db, voter)
-    review = await db.get(LifeReview, review_id)
+    # Serialize reports for the same review so concurrent requests cannot both
+    # pass the duplicate check or lose a report_count increment. PostgreSQL
+    # enforces the row lock; SQLite safely treats it as a no-op in tests.
+    review = await db.scalar(
+        select(LifeReview)
+        .where(LifeReview.id == review_id)
+        .with_for_update()
+    )
     if review is None:
         return None
     if (
