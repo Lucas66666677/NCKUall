@@ -2,14 +2,24 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException, status as status_codes
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.models import ChatHistory, LifeReview, ReviewModerationStatus, User
+from app.models import (
+    ChatHistory,
+    Course,
+    CourseSubmissionStatus,
+    CourseVisualSubmission,
+    LifeReview,
+    ReviewModerationStatus,
+    User,
+)
 from app.security.karma import APPROVED_REVIEW_KARMA, CONFIRMED_FLAG_PENALTY
 
 
@@ -108,6 +118,109 @@ def update_review_status(
         },
     )
     return review
+
+
+COURSE_SUBMISSION_APPLIED_FIELDS = (
+    "title_zh",
+    "title_en",
+    "instructor_name",
+    "academic_year",
+    "semester",
+    "credits",
+    "required_for_major",
+    "syllabus_url",
+    "description",
+)
+
+
+def list_course_submissions(
+    db: Session,
+    *,
+    status: CourseSubmissionStatus | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[CourseVisualSubmission], int]:
+    """Return queued course edits, oldest first so nothing starves."""
+
+    conditions = []
+    if status is not None:
+        conditions.append(CourseVisualSubmission.status == status)
+    total = db.scalar(
+        select(func.count(CourseVisualSubmission.id)).where(*conditions)
+    ) or 0
+    statement = (
+        select(CourseVisualSubmission)
+        .where(*conditions)
+        .order_by(
+            CourseVisualSubmission.created_at,
+            CourseVisualSubmission.id,
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(db.scalars(statement).all()), int(total)
+
+
+def review_course_submission(
+    db: Session,
+    *,
+    submission_id: UUID,
+    approve: bool,
+    admin_user_id: str,
+) -> CourseVisualSubmission | None:
+    """Approve a queued course edit onto the live row, or reject it.
+
+    Approving copies only the fields the visual extraction actually owns, and
+    only where the submission carried a value -- a null in the proposal means
+    "not read from the document", not "clear this field".
+    """
+
+    submission = db.get(CourseVisualSubmission, submission_id)
+    if submission is None:
+        return None
+    if submission.status is not CourseSubmissionStatus.PENDING:
+        raise HTTPException(
+            status_code=status_codes.HTTP_409_CONFLICT,
+            detail="此課程提交已審核過",
+        )
+
+    if approve:
+        course = db.get(Course, submission.course_id)
+        if course is None:
+            raise HTTPException(
+                status_code=status_codes.HTTP_404_NOT_FOUND,
+                detail="找不到對應課程",
+            )
+        proposed = submission.proposed or {}
+        for field in COURSE_SUBMISSION_APPLIED_FIELDS:
+            value = proposed.get(field)
+            if value is None:
+                continue
+            if field == "credits":
+                value = Decimal(str(value))
+            setattr(course, field, value)
+        course.updated_at = datetime.now(UTC)
+
+    submission.status = (
+        CourseSubmissionStatus.APPROVED
+        if approve
+        else CourseSubmissionStatus.REJECTED
+    )
+    submission.reviewed_by_user_id = admin_user_id
+    submission.reviewed_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(submission)
+
+    logger.info(
+        "admin_course_submission_reviewed",
+        extra={
+            "submission_id": str(submission_id),
+            "course_id": str(submission.course_id),
+            "admin_user_id": admin_user_id,
+            "decision": submission.status.value,
+        },
+    )
+    return submission
 
 
 def get_admin_dashboard_stats(db: Session) -> tuple[int, int, list[str]]:

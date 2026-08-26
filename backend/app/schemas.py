@@ -9,6 +9,7 @@ from app.models import (
     ActivityType,
     CareerResourceType,
     CourseDifficulty,
+    CourseSubmissionStatus,
     LifeReviewType,
     LifeResourceType,
     ReviewModerationStatus,
@@ -369,6 +370,33 @@ class AdminFlaggedReviewsResponse(BaseModel):
 
 class AdminReviewStatusUpdate(BaseModel):
     status: ReviewModerationStatus
+
+
+class AdminCourseSubmissionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    course_id: UUID
+    submitted_by_user_id: str | None = None
+    status: CourseSubmissionStatus
+    proposed: dict
+    confidence: Decimal | None = None
+    upload_sha256: str | None = None
+    reviewed_by_user_id: str | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminCourseSubmissionsResponse(BaseModel):
+    items: list[AdminCourseSubmissionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminCourseSubmissionDecision(BaseModel):
+    approve: bool
 
 
 class AdminDashboardStatsResponse(BaseModel):
