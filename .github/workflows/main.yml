@@ -10,6 +10,7 @@ on:
   # frontend job at all, so stacked work could reach main having never been
   # tested on its own.
   pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   backend:
