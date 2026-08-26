@@ -50,6 +50,38 @@ type DashboardStats = {
   popular_search_terms: string[];
 };
 
+type CourseSubmission = {
+  id: string;
+  course_id: string;
+  submitted_by_user_id: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  proposed: Record<string, unknown>;
+  confidence: string | null;
+  created_at: string;
+};
+
+type CourseSubmissionsResponse = {
+  items: CourseSubmission[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+// Only the fields the visual extraction is allowed to write through on
+// approval, in the order an administrator most likely wants to scan them.
+const REVIEWABLE_COURSE_FIELDS: { key: string; label: string }[] = [
+  { key: "course_code", label: "課號" },
+  { key: "title_zh", label: "課名" },
+  { key: "title_en", label: "英文課名" },
+  { key: "instructor_name", label: "授課教師" },
+  { key: "academic_year", label: "學年" },
+  { key: "semester", label: "學期" },
+  { key: "credits", label: "學分" },
+  { key: "required_for_major", label: "必修" },
+  { key: "syllabus_url", label: "課綱連結" },
+  { key: "description", label: "課程說明" },
+];
+
 const emptyStats: DashboardStats = {
   today_new_reviews: 0,
   pending_flagged_reviews: 0,
@@ -65,6 +97,11 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [updatingReviewId, setUpdatingReviewId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submissions, setSubmissions] = useState<CourseSubmission[]>([]);
+  const [submissionTotal, setSubmissionTotal] = useState(0);
+  const [updatingSubmissionId, setUpdatingSubmissionId] = useState<
+    string | null
+  >(null);
 
   const isAdmin = userRole === USER_ROLES.ADMIN;
 
@@ -91,13 +128,18 @@ export default function AdminPage() {
       }
       const headers = { Authorization: `Bearer ${token}` };
       const offset = page * PAGE_SIZE;
-      const [reviewsResponse, statsResponse] = await Promise.all([
-        fetch(
-          `${API_BASE_URL}/api/admin/reviews/flagged?limit=${PAGE_SIZE}&offset=${offset}`,
-          { headers },
-        ),
-        fetch(`${API_BASE_URL}/api/admin/stats`, { headers }),
-      ]);
+      const [reviewsResponse, statsResponse, submissionsResponse] =
+        await Promise.all([
+          fetch(
+            `${API_BASE_URL}/api/admin/reviews/flagged?limit=${PAGE_SIZE}&offset=${offset}`,
+            { headers },
+          ),
+          fetch(`${API_BASE_URL}/api/admin/stats`, { headers }),
+          fetch(
+            `${API_BASE_URL}/api/admin/course-submissions?status=PENDING&limit=${PAGE_SIZE}&offset=0`,
+            { headers },
+          ),
+        ]);
 
       if (!reviewsResponse.ok || !statsResponse.ok) {
         throw new Error("admin_api_failed");
@@ -109,6 +151,18 @@ export default function AdminPage() {
       setReviews(reviewData.items);
       setTotal(reviewData.total);
       setStats(statsData);
+
+      // Tolerate a backend that predates the course-submission queue rather
+      // than blanking the whole console over it.
+      if (submissionsResponse.ok) {
+        const submissionData =
+          (await submissionsResponse.json()) as CourseSubmissionsResponse;
+        setSubmissions(submissionData.items);
+        setSubmissionTotal(submissionData.total);
+      } else {
+        setSubmissions([]);
+        setSubmissionTotal(0);
+      }
 
       if (reviewData.items.length === 0 && page > 0) {
         setPage((current) => current - 1);
@@ -156,6 +210,36 @@ export default function AdminPage() {
       setErrorMessage("狀態更新失敗，資料未變更。");
     } finally {
       setUpdatingReviewId(null);
+    }
+  }
+
+  async function reviewSubmission(submissionId: string, approve: boolean) {
+    setUpdatingSubmissionId(submissionId);
+    setErrorMessage(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error("missing_session");
+      }
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/course-submissions/${submissionId}/review`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ approve }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`review_failed_${response.status}`);
+      }
+      await loadDashboard();
+    } catch {
+      setErrorMessage("課程提交審核失敗，課程資料未變更。");
+    } finally {
+      setUpdatingSubmissionId(null);
     }
   }
 
@@ -367,6 +451,94 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8" aria-labelledby="course-submission-title">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <h2
+                id="course-submission-title"
+                className="text-lg font-bold text-ink"
+              >
+                課程修改審核隊列
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                共 {submissionTotal} 筆由成大帳號提出、尚未套用的課程修改
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            {!isLoading && submissions.length === 0 && (
+              <p className="px-4 py-12 text-center text-sm text-slate-500">
+                目前沒有待審核的課程修改。
+              </p>
+            )}
+            <ul className="divide-y divide-slate-100">
+              {submissions.map((submission) => {
+                const isUpdating = updatingSubmissionId === submission.id;
+                const proposedFields = REVIEWABLE_COURSE_FIELDS.filter(
+                  ({ key }) =>
+                    submission.proposed[key] !== null &&
+                    submission.proposed[key] !== undefined,
+                );
+                return (
+                  <li key={submission.id} className="px-4 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs text-slate-400">
+                          提交者 {submission.submitted_by_user_id ?? "未知帳號"}
+                          {submission.confidence
+                            ? ` ・ 辨識信心 ${submission.confidence}`
+                            : ""}
+                        </p>
+                        <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                          {proposedFields.map(({ key, label }) => (
+                            <div key={key} className="flex gap-2 text-sm">
+                              <dt className="shrink-0 text-slate-500">
+                                {label}
+                              </dt>
+                              <dd className="min-w-0 break-words font-medium text-ink">
+                                {String(submission.proposed[key])}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() =>
+                            void reviewSubmission(submission.id, true)
+                          }
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-200 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                        >
+                          {isUpdating ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                          套用修改
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isUpdating}
+                          onClick={() =>
+                            void reviewSubmission(submission.id, false)
+                          }
+                          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <EyeOff className="h-4 w-4" />
+                          退回
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         </section>
       </div>
