@@ -21,7 +21,13 @@ from app.auth import (
     verify_visual_ingestion_user,
 )
 from app.main import app
-from app.models import Activity, Course, Department
+from app.models import (
+    Activity,
+    Course,
+    CourseSubmissionStatus,
+    CourseVisualSubmission,
+    Department,
+)
 from app.security.rate_limit import RedisRateLimiter
 from app.security.visual_ingestion import (
     enforce_visual_ingestion_rate_limit,
@@ -400,3 +406,135 @@ async def test_visual_endpoint_upserts_event_and_course(
     assert activities[0].tags == ["AI 視覺匯入", "校園活動"]
     assert len(courses) == 1
     assert courses[0].tags == ["AI 視覺匯入", "課程簡章"]
+
+
+@pytest.mark.integration
+async def test_non_admin_course_edit_is_queued_not_applied(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_access_token: AccessTokenFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verified NCKU account may add a course but not silently rewrite one."""
+
+    department = Department(
+        code="DPS",
+        name_zh="光電科學與工程學系",
+        college="理學院",
+        is_active=True,
+    )
+    db_session.add(department)
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        app.state,
+        "visual_ingestion_rate_limiter",
+        RedisRateLimiter(FakeRedis(), window_seconds=3600),
+        raising=False,
+    )
+    app.state.visual_ingestion_parser = FakeParser(course_extraction())
+    png = make_png()
+    student_headers = {
+        "Authorization": f"Bearer {make_access_token('student@gs.ncku.edu.tw')}"
+    }
+
+    created = await client.post(
+        "/api/admin/ingest/visual",
+        headers=student_headers,
+        data={"ingest_type": "course"},
+        files={"file": ("course.png", png, "image/png")},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["action"] == "created"
+
+    # Same course, second non-admin upload carrying different content.
+    edited = course_extraction()
+    edited.title_zh = "被竄改的課名"
+    edited.instructor_name = "冒名教師"
+    app.state.visual_ingestion_parser = FakeParser(edited)
+
+    queued = await client.post(
+        "/api/admin/ingest/visual",
+        headers={
+            "Authorization": f"Bearer {make_access_token('other@gs.ncku.edu.tw')}"
+        },
+        data={"ingest_type": "course"},
+        files={"file": ("course.png", png, "image/png")},
+    )
+    assert queued.status_code == 200, queued.text
+    assert queued.json()["action"] == "pending_review"
+
+    course = await db_session.scalar(select(Course))
+    assert course is not None
+    await db_session.refresh(course)
+    assert course.title_zh == "光電導論"
+    assert course.instructor_name == "王教授"
+
+    submissions = list(
+        (await db_session.scalars(select(CourseVisualSubmission))).all()
+    )
+    assert len(submissions) == 1
+    assert submissions[0].status == CourseSubmissionStatus.PENDING
+    assert submissions[0].course_id == course.id
+    assert submissions[0].proposed["title_zh"] == "被竄改的課名"
+
+
+@pytest.mark.integration
+async def test_admin_course_edit_still_applies_directly(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_access_token: AccessTokenFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    department = Department(
+        code="DPS",
+        name_zh="光電科學與工程學系",
+        college="理學院",
+        is_active=True,
+    )
+    db_session.add(department)
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        app.state,
+        "visual_ingestion_rate_limiter",
+        RedisRateLimiter(FakeRedis(), window_seconds=3600),
+        raising=False,
+    )
+    app.state.visual_ingestion_parser = FakeParser(course_extraction())
+    png = make_png()
+    admin_headers = {
+        "Authorization": "Bearer "
+        + make_access_token(
+            "admin@gs.ncku.edu.tw",
+            extra_claims={"is_admin": True},
+        )
+    }
+
+    created = await client.post(
+        "/api/admin/ingest/visual",
+        headers=admin_headers,
+        data={"ingest_type": "course"},
+        files={"file": ("course.png", png, "image/png")},
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["action"] == "created"
+
+    corrected = course_extraction()
+    corrected.title_zh = "光電導論（更新）"
+    app.state.visual_ingestion_parser = FakeParser(corrected)
+
+    updated = await client.post(
+        "/api/admin/ingest/visual",
+        headers=admin_headers,
+        data={"ingest_type": "course"},
+        files={"file": ("course.png", png, "image/png")},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["action"] == "updated"
+
+    course = await db_session.scalar(select(Course))
+    assert course is not None
+    await db_session.refresh(course)
+    assert course.title_zh == "光電導論（更新）"
+    assert (await db_session.scalars(select(CourseVisualSubmission))).all() == []

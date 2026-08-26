@@ -117,7 +117,13 @@ async def ingest_visual_document(
     else:
         if not isinstance(extraction, CourseVisualExtraction):
             raise TypeError("Parser returned the wrong course schema.")
-        persisted = await upsert_course_from_visual(db, extraction)
+        persisted = await upsert_course_from_visual(
+            db,
+            extraction,
+            is_admin=is_admin_user(user),
+            submitted_by_user_id=user.user_id,
+            upload_sha256=upload.sha256,
+        )
 
     logger.info(
         "visual_ingestion_completed",

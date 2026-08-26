@@ -15,6 +15,8 @@ from app.models import (
     ActivityType,
     Course,
     CourseDifficulty,
+    CourseSubmissionStatus,
+    CourseVisualSubmission,
     Department,
 )
 from app.visual_ingestion.schemas import (
@@ -159,9 +161,44 @@ async def upsert_event_from_visual(
         raise
 
 
+async def queue_course_submission(
+    db: AsyncSession,
+    *,
+    course: Course,
+    extraction: CourseVisualExtraction,
+    submitted_by_user_id: str | None,
+    upload_sha256: str | None,
+) -> PersistedVisualResource:
+    """Record a proposed edit for admin review, leaving the course untouched."""
+
+    submission = CourseVisualSubmission(
+        course_id=course.id,
+        submitted_by_user_id=submitted_by_user_id,
+        status=CourseSubmissionStatus.PENDING,
+        proposed=extraction.model_dump(mode="json"),
+        confidence=Decimal(str(extraction.confidence)),
+        upload_sha256=upload_sha256,
+    )
+    db.add(submission)
+    await db.commit()
+    await db.refresh(submission)
+    return PersistedVisualResource(
+        action="pending_review",
+        resource_id=submission.id,
+        title=course.title_zh,
+        tags=list(course.tags or []),
+        created_at=submission.created_at,
+        updated_at=submission.updated_at,
+    )
+
+
 async def upsert_course_from_visual(
     db: AsyncSession,
     extraction: CourseVisualExtraction,
+    *,
+    is_admin: bool,
+    submitted_by_user_id: str | None = None,
+    upload_sha256: str | None = None,
 ) -> PersistedVisualResource:
     assert extraction.course_code is not None
     assert extraction.title_zh is not None
@@ -187,6 +224,18 @@ async def upsert_course_from_visual(
                 Course.course_code == course_code,
             )
         )
+        if course is not None and not is_admin:
+            # A verified NCKU account may still add a course the catalog is
+            # missing, but editing one that already exists goes to the admin
+            # queue rather than straight into the canonical row.
+            return await queue_course_submission(
+                db,
+                course=course,
+                extraction=extraction,
+                submitted_by_user_id=submitted_by_user_id,
+                upload_sha256=upload_sha256,
+            )
+
         action = "updated" if course is not None else "created"
         if course is None:
             course = Course(
