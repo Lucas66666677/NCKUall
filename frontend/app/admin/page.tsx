@@ -67,10 +67,12 @@ type CourseSubmissionsResponse = {
   offset: number;
 };
 
-// Only the fields the visual extraction is allowed to write through on
-// approval, in the order an administrator most likely wants to scan them.
+// Exactly the fields approval writes through (COURSE_SUBMISSION_APPLIED_FIELDS
+// in app/controllers/admin.py), in the order an administrator most likely wants
+// to scan them. Deliberately excludes course_code and department: those decide
+// which course a submission targets, so approval never rewrites them, and
+// listing them under an "apply" button would imply otherwise.
 const REVIEWABLE_COURSE_FIELDS: { key: string; label: string }[] = [
-  { key: "course_code", label: "課號" },
   { key: "title_zh", label: "課名" },
   { key: "title_en", label: "英文課名" },
   { key: "instructor_name", label: "授課教師" },

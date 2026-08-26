@@ -175,7 +175,15 @@ def review_course_submission(
     "not read from the document", not "clear this field".
     """
 
-    submission = db.get(CourseVisualSubmission, submission_id)
+    # Lock the row before reading its status: without this, two administrators
+    # clicking approve at the same moment both see PENDING and both write the
+    # proposal onto the live course. PostgreSQL enforces the lock; SQLite
+    # treats it as a no-op.
+    submission = db.scalar(
+        select(CourseVisualSubmission)
+        .where(CourseVisualSubmission.id == submission_id)
+        .with_for_update()
+    )
     if submission is None:
         return None
     if submission.status is not CourseSubmissionStatus.PENDING:

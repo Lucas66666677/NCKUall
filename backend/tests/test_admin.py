@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol
@@ -272,6 +273,41 @@ async def test_admin_can_approve_queued_course_edit(
         json={"approve": True},
     )
     assert replay.status_code == 409
+
+
+async def test_concurrent_approvals_apply_the_edit_only_once(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    make_access_token: AccessTokenFactory,
+) -> None:
+    """Two admins clicking approve together must not both write the proposal."""
+    _course, submission = await _seed_course_submission(db_session)
+    headers = {
+        "Authorization": "Bearer "
+        + make_access_token(
+            "admin@ncku.edu.tw",
+            extra_claims={"app_metadata": {"is_admin": True}},
+        )
+    }
+
+    first, second = await asyncio.gather(
+        client.post(
+            f"/api/admin/course-submissions/{submission.id}/review",
+            headers=headers,
+            json={"approve": True},
+        ),
+        client.post(
+            f"/api/admin/course-submissions/{submission.id}/review",
+            headers=headers,
+            json={"approve": True},
+        ),
+    )
+
+    statuses = sorted([first.status_code, second.status_code])
+    assert statuses == [200, 409], statuses
+
+    await db_session.refresh(submission)
+    assert submission.status is CourseSubmissionStatus.APPROVED
 
 
 async def test_admin_reject_leaves_course_untouched(
