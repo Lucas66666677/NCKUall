@@ -968,3 +968,38 @@ class LifeReviewVote(UUIDPrimaryKeyMixin, Base):
         server_default=func.now(),
         nullable=False,
     )
+
+
+class LifeReviewFlag(UUIDPrimaryKeyMixin, Base):
+    """One verified NCKU abuse report per life review.
+
+    Tracked per-reporter (not just a bare counter) so that a single account
+    cannot single-handedly reach the auto-hide threshold by calling the flag
+    endpoint repeatedly.
+    """
+
+    __tablename__ = "life_review_flags"
+    __table_args__ = (
+        UniqueConstraint(
+            "life_review_id",
+            "reporter_user_id",
+            name="uq_life_review_flags_review_reporter",
+        ),
+        Index("ix_life_review_flags_review_created", "life_review_id", "created_at"),
+    )
+
+    life_review_id: Mapped[UUID] = mapped_column(
+        ForeignKey("life_reviews.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    reporter_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
