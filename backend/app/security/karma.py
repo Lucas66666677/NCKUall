@@ -192,14 +192,7 @@ async def create_life_review_upvote(
     voter: AuthUser,
 ) -> LifeReview | None:
     voter_profile = await ensure_user_profile(db, voter)
-    # Serialize reports for the same review so concurrent requests cannot both
-    # pass the duplicate check or lose a report_count increment. PostgreSQL
-    # enforces the row lock; SQLite safely treats it as a no-op in tests.
-    review = await db.scalar(
-        select(LifeReview)
-        .where(LifeReview.id == review_id)
-        .with_for_update()
-    )
+    review = await db.get(LifeReview, review_id)
     if review is None:
         return None
     if (
@@ -250,7 +243,14 @@ async def flag_life_review_for_moderation(
     reporter: AuthUser,
 ) -> LifeReview | None:
     reporter_profile = await ensure_user_profile(db, reporter)
-    review = await db.get(LifeReview, review_id)
+    # Serialize reports for the same review so concurrent requests cannot both
+    # pass the duplicate check or lose a report_count increment. PostgreSQL
+    # enforces the row lock; SQLite safely treats it as a no-op in tests.
+    review = await db.scalar(
+        select(LifeReview)
+        .where(LifeReview.id == review_id)
+        .with_for_update()
+    )
     if review is None:
         return None
     if review.moderation_status == ReviewModerationStatus.HIDDEN:
