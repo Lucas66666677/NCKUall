@@ -14,6 +14,7 @@ from app.auth import AuthUser
 from app.models import (
     CourseReview,
     LifeReview,
+    LifeReviewFlag,
     LifeReviewVote,
     ReviewModerationStatus,
     User,
@@ -26,6 +27,7 @@ UPVOTE_KARMA = 2
 CONFIRMED_FLAG_PENALTY = -20
 MAX_REVIEWS_PER_HOUR = 3
 DUPLICATE_SIMILARITY_THRESHOLD = 0.85
+FLAG_HIDE_THRESHOLD = 3
 
 
 @dataclass(frozen=True)
@@ -240,17 +242,45 @@ async def flag_life_review_for_moderation(
     review_id: UUID,
     reporter: AuthUser,
 ) -> LifeReview | None:
-    await ensure_user_profile(db, reporter)
-    review = await db.get(LifeReview, review_id)
+    reporter_profile = await ensure_user_profile(db, reporter)
+    # Serialize reports for the same review so concurrent requests cannot both
+    # pass the duplicate check or lose a report_count increment. PostgreSQL
+    # enforces the row lock; SQLite safely treats it as a no-op in tests.
+    review = await db.scalar(
+        select(LifeReview)
+        .where(LifeReview.id == review_id)
+        .with_for_update()
+    )
     if review is None:
         return None
     if review.moderation_status == ReviewModerationStatus.HIDDEN:
         return review
 
+    existing_flag = await db.scalar(
+        select(LifeReviewFlag).where(
+            LifeReviewFlag.life_review_id == review_id,
+            LifeReviewFlag.reporter_user_id == reporter_profile.id,
+        )
+    )
+    if existing_flag is not None:
+        return review
+
+    db.add(
+        LifeReviewFlag(
+            life_review_id=review_id,
+            reporter_user_id=reporter_profile.id,
+        )
+    )
     review.report_count += 1
     review.last_reported_at = datetime.now(UTC)
-    review.moderation_status = ReviewModerationStatus.PENDING
-    review.is_approved = False
+    # A single report enters the admin moderation queue for awareness, but only
+    # a threshold of *distinct* reporters (enforced by the unique constraint on
+    # LifeReviewFlag) takes the review off the public board automatically.
+    # Preserves legitimate abuse-reporting while preventing one account from
+    # unilaterally silencing another user's review.
+    if review.report_count >= FLAG_HIDE_THRESHOLD:
+        review.moderation_status = ReviewModerationStatus.PENDING
+        review.is_approved = False
     await db.commit()
     await db.refresh(review)
     return review
