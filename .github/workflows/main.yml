@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
+  # Deliberately unfiltered. This repo uses stacked pull requests, where one PR
+  # is based on another PR's branch rather than on main. Under a
+  # `branches: [main]` filter those PRs matched nothing and ran no backend or
+  # frontend job at all, so stacked work could reach main having never been
+  # tested on its own.
   pull_request:
-    branches:
-      - main
+    types: [opened, synchronize, reopened]
 
 jobs:
   backend:
