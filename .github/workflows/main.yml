@@ -60,6 +60,15 @@ jobs:
         working-directory: backend
         run: flake8 app scripts tests --count --select=E9,F63,F7,F82 --show-source --statistics
 
+      # Runs before Postgres is touched, and again inside the full suite below.
+      # The public course and trending endpoints are what the Next.js site
+      # fetches with no credentials, so a break there gets its own named failed
+      # step instead of being buried in the integration run -- and is still
+      # reported when the database service is the thing that is broken.
+      - name: Verify the public anonymous API contract
+        working-directory: backend
+        run: pytest tests/test_public_api_contract.py
+
       - name: Apply Alembic migrations to the integration database
         working-directory: backend
         env:
