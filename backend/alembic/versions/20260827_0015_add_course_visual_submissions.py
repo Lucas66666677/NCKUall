@@ -23,6 +23,9 @@ def upgrade() -> None:
         "APPROVED",
         "REJECTED",
         name="course_submission_status",
+        # The migration creates this type explicitly below; prevent table
+        # creation from issuing a second CREATE TYPE in the same upgrade.
+        create_type=False,
     )
     course_submission_status.create(op.get_bind(), checkfirst=True)
 
