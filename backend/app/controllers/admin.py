@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status as status_codes
 from sqlalchemy import case, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -46,14 +47,28 @@ def ensure_user_profile_sync(db: Session, user: AuthUser) -> User:
 
     profile_id = user_profile_id(user)
     profile = db.get(User, profile_id)
-    if profile is None:
-        profile = User(id=profile_id, email_hash=email_hash(user), karma_points=0)
-        db.add(profile)
-        db.flush()
-    elif profile.email_hash is None:
-        profile.email_hash = email_hash(user)
-        db.flush()
-    return profile
+    if profile is not None:
+        if profile.email_hash is None:
+            profile.email_hash = email_hash(user)
+            db.flush()
+        return profile
+
+    # Two administrators acting at the same moment both read "no profile" and
+    # both try to insert it, so the check above is not enough on its own. Insert
+    # inside a SAVEPOINT: whichever request loses the race rolls back only that
+    # savepoint -- not the caller's transaction, which still has a course edit to
+    # apply -- and then reads the row the winner committed.
+    candidate = User(id=profile_id, email_hash=email_hash(user), karma_points=0)
+    try:
+        with db.begin_nested():
+            db.add(candidate)
+        return candidate
+    except IntegrityError:
+        db.expunge(candidate)
+        profile = db.get(User, profile_id)
+        if profile is None:
+            raise
+        return profile
 
 
 def unresolved_flagged_reviews_filter() -> ColumnElement[bool]:
