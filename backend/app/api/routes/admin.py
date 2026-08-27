@@ -126,7 +126,7 @@ def post_course_submission_review(
         db,
         submission_id=submission_id,
         approve=payload.approve,
-        admin_user_id=admin_user.user_id or admin_user.email,
+        admin_user=admin_user,
     )
     if submission is None:
         raise HTTPException(

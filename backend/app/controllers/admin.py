@@ -11,6 +11,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.auth import AuthUser
 from app.models import (
     ChatHistory,
     Course,
@@ -20,11 +21,39 @@ from app.models import (
     ReviewModerationStatus,
     User,
 )
-from app.security.karma import APPROVED_REVIEW_KARMA, CONFIRMED_FLAG_PENALTY
+from app.security.karma import (
+    APPROVED_REVIEW_KARMA,
+    CONFIRMED_FLAG_PENALTY,
+    email_hash,
+    user_profile_id,
+)
 
 
 logger = logging.getLogger(__name__)
 TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
+
+
+def ensure_user_profile_sync(db: Session, user: AuthUser) -> User:
+    """Materialise the users row for `user` on a synchronous Session.
+
+    The async `ensure_user_profile` cannot be awaited from the admin routes,
+    which run on a sync Session. `course_visual_submissions.reviewed_by_user_id`
+    is a real foreign key into users, so an administrator whose profile row has
+    never been created -- entirely possible, since admin rights come from the
+    JWT rather than from any local row -- would otherwise make every approve or
+    reject fail with a foreign key violation.
+    """
+
+    profile_id = user_profile_id(user)
+    profile = db.get(User, profile_id)
+    if profile is None:
+        profile = User(id=profile_id, email_hash=email_hash(user), karma_points=0)
+        db.add(profile)
+        db.flush()
+    elif profile.email_hash is None:
+        profile.email_hash = email_hash(user)
+        db.flush()
+    return profile
 
 
 def unresolved_flagged_reviews_filter() -> ColumnElement[bool]:
@@ -166,7 +195,7 @@ def review_course_submission(
     *,
     submission_id: UUID,
     approve: bool,
-    admin_user_id: str,
+    admin_user: AuthUser,
 ) -> CourseVisualSubmission | None:
     """Approve a queued course edit onto the live row, or reject it.
 
@@ -179,6 +208,7 @@ def review_course_submission(
     # clicking approve at the same moment both see PENDING and both write the
     # proposal onto the live course. PostgreSQL enforces the lock; SQLite
     # treats it as a no-op.
+    reviewer = ensure_user_profile_sync(db, admin_user)
     submission = db.scalar(
         select(CourseVisualSubmission)
         .where(CourseVisualSubmission.id == submission_id)
@@ -214,7 +244,7 @@ def review_course_submission(
         if approve
         else CourseSubmissionStatus.REJECTED
     )
-    submission.reviewed_by_user_id = admin_user_id
+    submission.reviewed_by_user_id = reviewer.id
     submission.reviewed_at = datetime.now(UTC)
     db.commit()
     db.refresh(submission)
@@ -224,7 +254,7 @@ def review_course_submission(
         extra={
             "submission_id": str(submission_id),
             "course_id": str(submission.course_id),
-            "admin_user_id": admin_user_id,
+            "admin_user_id": reviewer.id,
             "decision": submission.status.value,
         },
     )
