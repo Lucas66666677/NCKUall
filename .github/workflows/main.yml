@@ -60,6 +60,16 @@ jobs:
         working-directory: backend
         run: flake8 app scripts tests --count --select=E9,F63,F7,F82 --show-source --statistics
 
+      - name: Apply Alembic migrations to the integration database
+        working-directory: backend
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Keep the migration proof isolated: pytest owns nckuall_test and
+          # expects an empty schema for each run.
+          psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE nckuall_migration_test"
+          DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/nckuall_migration_test python -m alembic upgrade head
+
       - name: Run backend integration tests
         working-directory: backend
         env:
