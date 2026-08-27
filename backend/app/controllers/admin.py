@@ -64,7 +64,9 @@ def ensure_user_profile_sync(db: Session, user: AuthUser) -> User:
             db.add(candidate)
         return candidate
     except IntegrityError:
-        db.expunge(candidate)
+        # Rolling the savepoint back already evicted `candidate` from the
+        # session, so there is nothing left to expunge -- just read the row the
+        # winning request committed.
         profile = db.get(User, profile_id)
         if profile is None:
             raise
