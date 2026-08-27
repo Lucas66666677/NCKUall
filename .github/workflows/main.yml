@@ -60,6 +60,12 @@ jobs:
         working-directory: backend
         run: flake8 app scripts tests --count --select=E9,F63,F7,F82 --show-source --statistics
 
+      - name: Apply Alembic migrations to the integration database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/nckuall_test
+        run: python -m alembic upgrade head
+
       - name: Run backend integration tests
         working-directory: backend
         env:
