@@ -138,7 +138,9 @@ class CourseVisualExtraction(VisualExtractionBase):
 
 class VisualIngestResponse(BaseModel):
     ingest_type: VisualIngestType
-    action: Literal["created", "updated"]
+    # "pending_review": a non-admin proposed an edit to an existing course, so
+    # resource_id is the queued submission's id, not the course's.
+    action: Literal["created", "updated", "pending_review"]
     resource_id: UUID
     title: str
     confidence: float

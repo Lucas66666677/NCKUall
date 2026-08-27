@@ -20,6 +20,7 @@ from app.auth import (
 )
 from app.database import get_async_db
 from app.models import Department
+from app.security.karma import ensure_user_profile
 from app.security.visual_ingestion import (
     enforce_visual_ingestion_rate_limit,
 )
@@ -117,7 +118,18 @@ async def ingest_visual_document(
     else:
         if not isinstance(extraction, CourseVisualExtraction):
             raise TypeError("Parser returned the wrong course schema.")
-        persisted = await upsert_course_from_visual(db, extraction)
+        # course_visual_submissions.submitted_by_user_id is a real foreign key
+        # into users, and a verified JWT does not by itself imply a users row
+        # exists yet. Materialise the profile first, exactly as the review-flag
+        # path does, or queuing a non-admin edit fails with a FK violation.
+        submitter = await ensure_user_profile(db, user)
+        persisted = await upsert_course_from_visual(
+            db,
+            extraction,
+            is_admin=is_admin_user(user),
+            submitted_by_user_id=submitter.id,
+            upload_sha256=upload.sha256,
+        )
 
     logger.info(
         "visual_ingestion_completed",

@@ -234,6 +234,12 @@ class ReviewModerationStatus(str, Enum):
     PENDING = "PENDING"
 
 
+class CourseSubmissionStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class Department(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
     NCKU department/faculty master table.
@@ -414,6 +420,51 @@ class Course(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="course",
         cascade="all, delete-orphan",
     )
+
+
+class CourseVisualSubmission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A non-admin proposal to change an already-published course record.
+
+    Verified NCKU accounts may add courses the catalog does not have yet, but
+    an edit to a course that already exists is queued here for an administrator
+    instead of overwriting the canonical row: the upload is AI-extracted from a
+    photo, so a single mistaken or malicious submission would otherwise silently
+    rewrite the title, instructor, credits or syllabus other students rely on.
+    """
+
+    __tablename__ = "course_visual_submissions"
+    __table_args__ = (
+        Index(
+            "ix_course_visual_submissions_status_created",
+            "status",
+            "created_at",
+        ),
+    )
+
+    course_id: Mapped[UUID] = mapped_column(
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    submitted_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+    )
+    status: Mapped[CourseSubmissionStatus] = mapped_column(
+        SQLEnum(CourseSubmissionStatus, name="course_submission_status"),
+        default=CourseSubmissionStatus.PENDING,
+        server_default=CourseSubmissionStatus.PENDING.value,
+        nullable=False,
+    )
+    proposed: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    confidence: Mapped[Optional[Decimal]] = mapped_column(Numeric(4, 3))
+    upload_sha256: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    reviewed_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    course: Mapped["Course"] = relationship()
 
 
 class CourseGradeDistribution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
