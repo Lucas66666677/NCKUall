@@ -182,6 +182,24 @@ app.include_router(api_router)
 app.include_router(realtime_router)
 
 
+@app.get("/livez", tags=["system"])
+async def liveness_probe() -> dict[str, str]:
+    """Report that this process is serving, and nothing else.
+
+    The container health gate probes this rather than ``/health``. ``/health``
+    pings the writer and the read replica, so a gate pointed there reports a
+    database outage as a dead process and restarts a backend that was never
+    the thing that broke. Readiness stays at ``/health`` -- the runbooks read
+    its ``read_only`` and ``degraded`` states for exactly that diagnosis; this
+    answers the narrower question a gate asks.
+
+    The payload is a literal, and deliberately so: the route is
+    unauthenticated, so anything it read would be published to any caller that
+    probes it.
+    """
+    return {"status": "alive"}
+
+
 @app.get("/health", tags=["system"])
 async def health_check() -> dict[str, str | bool]:
     database = await check_database_health(app)

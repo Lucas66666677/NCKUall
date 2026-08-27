@@ -69,6 +69,13 @@ jobs:
         working-directory: backend
         run: pytest tests/test_public_api_contract.py
 
+      # Same reasoning, for the deployment health gate: import-only, so it
+      # reports before Postgres exists, and named so a drifted gate is not
+      # buried in the integration run.
+      - name: Verify the deployment health gate contract
+        working-directory: backend
+        run: pytest tests/test_health_gate_contract.py
+
       - name: Apply Alembic migrations to the integration database
         working-directory: backend
         env:

@@ -63,11 +63,16 @@ services:
       - "${BACKEND_BIND:-127.0.0.1:8000}:8000"
     networks:
       - nckuall-internal
+    # Probes liveness, not readiness. `/health` pings the writer and the read
+    # replica, so a gate pointed there flips the container unhealthy for a
+    # database outage the process itself survived. `/health` stays the
+    # readiness signal the runbooks read; the gate asks only whether this
+    # process is serving.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -fsS http://127.0.0.1:$${PORT:-8000}/health | grep -E 'ok|read_only' >/dev/null",
+          "curl -fsS http://127.0.0.1:$${PORT:-8000}/livez | grep -q alive",
         ]
       interval: 30s
       timeout: 5s
