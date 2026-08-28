@@ -81,6 +81,17 @@ Always review the generated file before applying it. In particular, verify:
 - pgvector columns render as `pgvector.sqlalchemy.Vector(dim=1536)`.
 - Data migrations occur before new `NOT NULL` constraints when required.
 
+Skipping the revision entirely is the failure worth naming: the test suite
+builds its schema with `Base.metadata.create_all()`, so a table added only to
+`app/models.py` is present for every test and absent from every migrated
+database. `tests/test_migration_model_parity.py` compares the tables the
+upgrade path creates with the tables the models declare, and needs no database
+to do it:
+
+```powershell
+pytest tests/test_migration_model_parity.py
+```
+
 Then apply and inspect:
 
 ```powershell

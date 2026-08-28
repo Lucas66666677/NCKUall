@@ -79,10 +79,15 @@ jobs:
       # And again for the migration proof. The integration suite builds its
       # schema with create_all and never runs a migration, so the upgrade step
       # below is the only thing in CI that exercises Alembic -- deleting it
-      # would otherwise leave every job green.
+      # would otherwise leave every job green. The parity checks cover what
+      # that upgrade step cannot: it runs against an empty database and never
+      # compares the schema it produced with app/models.py, so a model shipped
+      # without a revision passes it.
       - name: Verify the database migration readiness gate
         working-directory: backend
-        run: pytest tests/test_migration_gate_contract.py
+        run: |
+          pytest tests/test_migration_gate_contract.py \
+                 tests/test_migration_model_parity.py
 
       - name: Apply Alembic migrations to the integration database
         working-directory: backend
