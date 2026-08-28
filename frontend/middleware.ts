@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getPublicApiBaseUrl } from "@/lib/public-runtime-config";
+
 const isProduction = process.env.NODE_ENV === "production";
 
 function randomNonce() {
@@ -19,6 +21,20 @@ function originFromEnv(value: string | undefined) {
   }
 }
 
+// CSP scheme-part matching does not let an `https:` source authorise a `wss:`
+// URL, so an origin the browser both fetches from and opens a socket to has to
+// be published in `connect-src` under both schemes. The hard-coded Render
+// entries below already spell out both; anything configured has to as well.
+function networkOrigins(origin: string | null) {
+  if (!origin) {
+    return [];
+  }
+
+  const socketOrigin = origin.replace(/^http(s)?:\/\//, "ws$1://");
+
+  return socketOrigin === origin ? [origin] : [origin, socketOrigin];
+}
+
 function compactPolicy(directives: string[]) {
   return directives
     .map((directive) => directive.trim())
@@ -27,7 +43,11 @@ function compactPolicy(directives: string[]) {
 }
 
 function buildContentSecurityPolicy(nonce: string) {
-  const apiOrigin = originFromEnv(process.env.NEXT_PUBLIC_API_BASE_URL);
+  // Resolve the API origin the same way the browser bundle does, rather than
+  // reading NEXT_PUBLIC_API_BASE_URL raw: a release that configures a private
+  // or unparseable value falls back to the canonical origin, and that fallback
+  // -- not the configured string -- is what the page actually connects to.
+  const apiOrigin = originFromEnv(getPublicApiBaseUrl());
   const siteOrigin = originFromEnv(process.env.NEXT_PUBLIC_SITE_URL);
   const wsOrigin = originFromEnv(process.env.NEXT_PUBLIC_WS_URL);
 
@@ -68,7 +88,9 @@ function buildContentSecurityPolicy(nonce: string) {
         "ws://127.0.0.1:*",
       ];
   const configuredSources = [
-    apiOrigin,
+    // `getPublicWebSocketUrl` derives the notifications socket from the API
+    // base URL, so the API origin needs its `wss:` form here too.
+    ...networkOrigins(apiOrigin),
     siteOrigin,
     wsOrigin,
   ].filter((source): source is string => Boolean(source));
