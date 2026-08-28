@@ -41,6 +41,19 @@ function isUnreachableFromThePublicInternet(hostname: string): boolean {
     return true;
   }
 
+  // IPv6 unique-local (fc00::/7), link-local (fe80::/10), and IPv4-mapped
+  // addresses are not usable public API origins either. URL normalizes an
+  // IPv4-mapped loopback such as ::ffff:127.0.0.1 to hexadecimal, so reject
+  // the mapped representation before attempting IPv4 parsing below.
+  if (
+    host.startsWith("fc") ||
+    host.startsWith("fd") ||
+    /^fe[89ab][0-9a-f:]*$/i.test(host) ||
+    host.startsWith("::ffff:")
+  ) {
+    return true;
+  }
+
   const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (!ipv4) {
     return false;
