@@ -76,6 +76,14 @@ jobs:
         working-directory: backend
         run: pytest tests/test_health_gate_contract.py
 
+      # And again for the image's baked reranker cache: the build downloads the
+      # model so that startup never has to, and the ARG, the ENV and the code
+      # fallback that keep that true sit in two files. File reads only, so this
+      # reports whatever the database service is doing.
+      - name: Verify the reranker image contract
+        working-directory: backend
+        run: pytest tests/test_reranker_image_contract.py
+
       # And again for the migration proof. The integration suite builds its
       # schema with create_all and never runs a migration, so the upgrade step
       # below is the only thing in CI that exercises Alembic -- deleting it
