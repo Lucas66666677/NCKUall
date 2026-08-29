@@ -39,7 +39,13 @@ USER appuser
 
 EXPOSE 8000
 
+# Liveness, not readiness. `/health` pings the writer and the read replica, so
+# an image gated there reports a database outage as a dead process and restarts
+# a backend that was never the thing that broke. `/livez` reports the process
+# and only the process. `docker-compose.prod.yml` overrides this healthcheck
+# with the same route; a launch path that does not override it inherits
+# whatever is written here, so the two have to agree.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
+    CMD curl -fsS "http://127.0.0.1:${PORT}/livez" || exit 1
 
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "app.main:app"]

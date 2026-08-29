@@ -13,6 +13,16 @@ Nothing else in the suite reads the compose file, so the gate is the piece
 most able to drift: renaming the route, or letting it grow a dependency,
 leaves the probe on a 404 or back on the database with every other test green.
 
+There are two gates, not one, and only the compose file was ever guarded.
+`backend/Dockerfile` carries its own `HEALTHCHECK`, and compose overrides it --
+so the image's own instruction is invisible to `docker compose up` and decides
+container health everywhere else: `docker run`, and any orchestrator that
+inherits the image's declaration rather than restating it. It sat on `/health`
+while the compose gate was moved to `/livez`, which is the same
+database-outage-reports-a-dead-process failure the move was written to prevent,
+reachable through a launch path no test looked at. Both gates are read below,
+and are required to name the same route.
+
 Like `test_public_api_contract.py` these checks are import-only -- no database,
 no running container -- so they also run as a standalone release-readiness step
 ahead of the integration suite.
@@ -39,6 +49,10 @@ LIVENESS_PATH = "/livez"
 READINESS_PATH = "/health"
 
 COMPOSE_FILE = Path(__file__).resolve().parents[2] / "docker-compose.prod.yml"
+
+#: The other gate. Compose overrides this one, so it governs every launch path
+#: that is not `docker compose up`.
+DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
 
 _URL = re.compile(r"https?://[^\s\"']+")
 
@@ -71,6 +85,33 @@ def _gate_probe_paths(service: str = "backend") -> list[str]:
     lines = COMPOSE_FILE.read_text(encoding="utf-8").splitlines()
     healthcheck = _indented_block(_indented_block(lines, f"{service}:"), "healthcheck:")
     return [urlsplit(url).path for url in _URL.findall("\n".join(healthcheck))]
+
+
+def _image_probe_paths(dockerfile_text: str | None = None) -> list[str]:
+    """URL paths the image's own `HEALTHCHECK` probes, in file order.
+
+    Scoped to the one `HEALTHCHECK` instruction, continuation lines included,
+    so a URL in a neighbouring `RUN` or `LABEL` is never mistaken for a probe.
+    An empty list means no probe could be read -- the callers below fail on
+    that rather than treating an absent or unreadable gate as a correct one.
+
+    Takes the text as an argument so the guard-the-guard checks can hand it a
+    Dockerfile this repository does not contain; the default is the real file.
+    """
+
+    if dockerfile_text is None:
+        dockerfile_text = DOCKERFILE.read_text(encoding="utf-8")
+
+    instruction: list[str] = []
+    for line in dockerfile_text.splitlines():
+        if not instruction:
+            if not line.strip().upper().startswith("HEALTHCHECK"):
+                continue
+        instruction.append(line)
+        if not line.rstrip().endswith("\\"):
+            break
+
+    return [urlsplit(url).path for url in _URL.findall("\n".join(instruction))]
 
 
 def _route(path: str) -> APIRoute | None:
@@ -138,6 +179,73 @@ def test_the_deployment_health_gate_probes_liveness() -> None:
         f"the backend health gate probes {off_target}; a dependency-sensitive "
         f"route there fails the container on a database outage"
     )
+
+
+def test_the_image_health_gate_probes_liveness() -> None:
+    """Compose overrides this, so every other launch path is what it decides.
+
+    `docker run`, and an orchestrator that reads the image's declaration rather
+    than restating its own, both inherit this instruction verbatim.
+    """
+
+    probes = _image_probe_paths()
+    assert probes, (
+        f"no probe URL could be read from the HEALTHCHECK in "
+        f"{DOCKERFILE.name}; an image with no readable gate is not a gated one"
+    )
+    off_target = sorted({path for path in probes if path != LIVENESS_PATH})
+    assert not off_target, (
+        f"the image health gate probes {off_target}; a container started "
+        f"outside compose would then fail on a database outage the process "
+        f"survived"
+    )
+
+
+def test_the_two_health_gates_name_the_same_route() -> None:
+    """They are two copies of one requirement, edited in two files.
+
+    Stated directly so moving one and forgetting the other fails here rather
+    than in whichever launch path happens not to be exercised.
+    """
+
+    assert set(_image_probe_paths()) == set(_gate_probe_paths())
+
+
+def test_the_image_probe_reader_finds_nothing_without_a_healthcheck() -> None:
+    """Guards the guard: the empty result the check above fails on is reachable."""
+
+    assert _image_probe_paths("FROM python:3.12-slim\nCMD [\"gunicorn\"]\n") == []
+
+
+def test_the_image_probe_reader_sees_a_gate_pointed_at_readiness() -> None:
+    """Guards the guard: prove the check above can fail, not just pass.
+
+    Without this, a reader that silently returned the liveness path for any
+    input would satisfy every other assertion in this file.
+    """
+
+    dockerfile = (
+        "FROM python:3.12-slim\n"
+        "HEALTHCHECK --interval=30s \\\n"
+        '    CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1\n'
+    )
+    assert _image_probe_paths(dockerfile) == [READINESS_PATH]
+
+
+def test_the_image_probe_reader_stops_at_the_end_of_the_instruction() -> None:
+    """A URL in a later instruction is not a probe.
+
+    The real Dockerfile fetches a model over the network at build time, so the
+    file genuinely does carry URLs the gate has nothing to do with.
+    """
+
+    dockerfile = (
+        "FROM python:3.12-slim\n"
+        "HEALTHCHECK --interval=30s \\\n"
+        '    CMD curl -fsS "http://127.0.0.1:${PORT}/livez" || exit 1\n'
+        "RUN curl -fsSL https://example.invalid/health -o /tmp/model\n"
+    )
+    assert _image_probe_paths(dockerfile) == [LIVENESS_PATH]
 
 
 def test_the_probe_reader_finds_nothing_in_a_gate_without_a_url() -> None:
