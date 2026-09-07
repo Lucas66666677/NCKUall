@@ -1,8 +1,5 @@
-from typing import Annotated
-from functools import lru_cache
-from os import getenv
-from pathlib import Path
 import re
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -16,6 +13,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
@@ -26,12 +24,12 @@ from app.cache import (
     get_cache_manager,
     low_churn_cache_ttl_seconds,
 )
+from app.controllers.analytics import record_search_log
 from app.controllers.courses import (
     create_course_review,
     get_course_by_id_async,
     list_courses,
 )
-from app.controllers.analytics import record_search_log
 from app.controllers.recommendations import (
     recommendation_user_id,
     record_user_view_log,
@@ -41,6 +39,7 @@ from app.database import (
     get_async_db,
     get_db,
 )
+from app.models import Course, CourseReview
 from app.schemas import (
     CourseResponse,
     CourseReviewCreate,
@@ -51,7 +50,6 @@ from app.security.developer_api import (
     DeveloperPrincipal,
     require_developer_scope,
 )
-
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
@@ -93,49 +91,6 @@ class CourseFilterResponse(BaseModel):
     results: list[CourseFilterItem]
 
 
-def _load_dotenv_for_local_dev() -> None:
-    """Load local env files lazily without overriding production variables."""
-
-    try:
-        from dotenv import load_dotenv
-
-        backend_root = Path(__file__).resolve().parents[3]
-        project_root = backend_root.parent
-        load_dotenv(project_root / ".env", override=False)
-        load_dotenv(backend_root / ".env", override=False)
-    except Exception:
-        return
-
-
-@lru_cache(maxsize=1)
-def _supabase_client():
-    _load_dotenv_for_local_dev()
-    supabase_url = getenv("SUPABASE_URL", "").strip()
-    supabase_key = (
-        getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-        or getenv("SUPABASE_ANON_KEY", "").strip()
-    )
-    if not supabase_url or not supabase_key:
-        raise RuntimeError(
-            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY are required."
-        )
-    try:
-        from supabase import create_client
-    except ImportError as exc:
-        raise RuntimeError("supabase Python SDK is not installed.") from exc
-    return create_client(supabase_url, supabase_key)
-
-
-def _get_supabase_or_503():
-    try:
-        return _supabase_client()
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Supabase client unavailable: {exc}",
-        ) from exc
-
-
 def _safe_search_text(value: str) -> str:
     text = re.sub(r"[\x00-\x1f,(){}]", " ", value.strip())
     text = re.sub(r"\s+", " ", text)
@@ -151,18 +106,22 @@ def _as_float(value) -> float | None:
         return None
 
 
-def _course_item_from_row(row: dict) -> CourseSearchItem:
+def _average(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 2) if values else None
+
+
+def _course_item_from_course(course: Course) -> CourseSearchItem:
     return CourseSearchItem(
-        id=row["id"],
-        course_code=row.get("course_code") or "",
-        title_zh=row.get("title_zh") or "",
-        title_en=row.get("title_en"),
-        instructor_name=row.get("instructor_name"),
-        department_id=row["department_id"],
-        credits=_as_float(row.get("credits")),
-        required_for_major=bool(row.get("required_for_major")),
-        tags=row.get("tags") or [],
-        href=f"/courses/{row['id']}",
+        id=course.id,
+        course_code=course.course_code or "",
+        title_zh=course.title_zh or "",
+        title_en=course.title_en,
+        instructor_name=course.instructor_name,
+        department_id=course.department_id,
+        credits=_as_float(course.credits),
+        required_for_major=bool(course.required_for_major),
+        tags=course.tags or [],
+        href=f"/courses/{course.id}",
     )
 
 
@@ -194,13 +153,6 @@ def _weekday_terms(weekday: str) -> list[str]:
     return mapping.get(normalized, [weekday.strip()])
 
 
-def _course_query_base(client):
-    return client.table("courses").select(
-        "id,course_code,title_zh,title_en,instructor_name,department_id,"
-        "credits,required_for_major,tags,description"
-    )
-
-
 @router.get(
     "",
     response_model=list[CourseResponse],
@@ -212,7 +164,9 @@ def get_courses(
         DeveloperPrincipal | None,
         Depends(require_developer_scope(COURSES_READ_SCOPE)),
     ],
-    department_id: Annotated[UUID | None, Query(description="Filter courses by department UUID.")] = None,
+    department_id: Annotated[
+        UUID | None, Query(description="Filter courses by department UUID.")
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[CourseResponse]:
@@ -236,55 +190,58 @@ def get_courses(
     ),
 )
 def search_courses(
+    db: Annotated[Session, Depends(get_db)],
     query: Annotated[
         str,
-        Query(min_length=1, max_length=80, description="Course title, instructor, or course code."),
+        Query(
+            min_length=1,
+            max_length=80,
+            description="Course title, instructor, or course code.",
+        ),
     ],
     department_id: Annotated[
         UUID | None,
         Query(description="Optionally restrict suggestions to one department."),
     ] = None,
 ) -> CourseSearchResponse:
-    """Return the top 10 lightweight fuzzy matches from Supabase."""
+    """Return the top 10 lightweight fuzzy matches from the primary database."""
 
     keyword = _safe_search_text(query)
     if not keyword:
         return CourseSearchResponse(query=query, count=0, results=[])
 
-    client = _get_supabase_or_503()
     pattern = f"%{keyword}%"
-    supabase_query = (
-        _course_query_base(client)
-        .or_(
-            ",".join(
-                [
-                    f"title_zh.ilike.{pattern}",
-                    f"title_en.ilike.{pattern}",
-                    f"instructor_name.ilike.{pattern}",
-                    f"course_code.ilike.{pattern}",
-                ]
+    statement = (
+        select(Course)
+        .where(
+            or_(
+                Course.title_zh.ilike(pattern),
+                Course.title_en.ilike(pattern),
+                Course.instructor_name.ilike(pattern),
+                Course.course_code.ilike(pattern),
             )
         )
+        .order_by(Course.course_code, Course.title_zh)
         .limit(10)
     )
     if department_id is not None:
-        supabase_query = supabase_query.eq("department_id", str(department_id))
+        statement = statement.where(Course.department_id == department_id)
 
-    response = supabase_query.execute()
-    results = [_course_item_from_row(row) for row in response.data or []]
+    results = [_course_item_from_course(course) for course in db.scalars(statement)]
     return CourseSearchResponse(query=keyword, count=len(results), results=results)
 
 
 @router.get(
     "/filter",
     response_model=CourseFilterResponse,
-    summary="Advanced AI-powered course filter",
+    summary="Advanced review-powered course filter",
     description=(
-        "Filter courses by AI-enriched review scores and tags, then attach "
-        "a representative AI summary for each course."
+        "Filter courses by normalized review ratings and tags, then attach "
+        "aggregated review signals for each course."
     ),
 )
 def filter_courses(
+    db: Annotated[Session, Depends(get_db)],
     min_sweetness: Annotated[
         float | None,
         Query(ge=1, le=5, description="Minimum AI sweetness score."),
@@ -303,94 +260,104 @@ def filter_courses(
     ] = None,
     weekday: Annotated[
         str | None,
-        Query(max_length=20, description="Optional weekday text/number, e.g. 1, mon, 週一."),
+        Query(
+            max_length=20,
+            description="Optional weekday text/number, e.g. 1, mon, 週一.",
+        ),
     ] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> CourseFilterResponse:
-    """Filter by course_reviews AI columns and enrich matching courses."""
+    """Filter using review ratings stored in the primary database.
 
-    client = _get_supabase_or_503()
-    review_query = (
-        client.table("course_reviews")
-        .select("course_id,sweetness,hardness,chillness,tags,ai_summary,created_at")
-        .eq("is_approved", True)
+    The import pipeline mirrors sweetness into grading fairness/overall rating
+    and hardness into difficulty/workload rating. Those canonical columns are
+    also populated by first-party reviews, so the public filter stays useful
+    without requiring a second Supabase REST credential path. Enrichment fields
+    that have no canonical database column remain null.
+    """
+
+    sweetness_rating = func.coalesce(
+        CourseReview.grading_fairness_rating,
+        CourseReview.overall_rating,
     )
+    hardness_rating = func.coalesce(
+        CourseReview.difficulty_rating,
+        CourseReview.workload_rating,
+    )
+    review_query = select(CourseReview).where(CourseReview.is_approved.is_(True))
     if min_sweetness is not None:
-        review_query = review_query.gte("sweetness", min_sweetness)
+        review_query = review_query.where(sweetness_rating >= min_sweetness)
     if max_hardness is not None:
-        review_query = review_query.lte("hardness", max_hardness)
+        review_query = review_query.where(hardness_rating <= max_hardness)
     clean_tags = [tag.strip() for tag in tags or [] if tag.strip()]
     if clean_tags:
-        review_query = review_query.contains("tags", clean_tags)
+        review_query = review_query.where(CourseReview.tags.contains(clean_tags))
 
-    review_response = review_query.limit(500).execute()
-    review_rows = [row for row in review_response.data or [] if row.get("course_id")]
-    if not review_rows:
+    reviews = list(
+        db.scalars(
+            review_query.order_by(CourseReview.created_at, CourseReview.id).limit(500)
+        )
+    )
+    if not reviews:
         return CourseFilterResponse(count=0, results=[])
 
-    summaries_by_course: dict[str, dict] = {}
-    for row in review_rows:
-        course_id = str(row["course_id"])
+    summaries_by_course: dict[UUID, dict] = {}
+    for review in reviews:
+        course_id = review.course_id
         bucket = summaries_by_course.setdefault(
             course_id,
             {
                 "review_count": 0,
                 "sweetness_values": [],
                 "hardness_values": [],
-                "chillness_values": [],
                 "review_tags": [],
-                "ai_summary": None,
-                "latest_created_at": "",
             },
         )
         bucket["review_count"] += 1
-        for key, values_key in (
-            ("sweetness", "sweetness_values"),
-            ("hardness", "hardness_values"),
-            ("chillness", "chillness_values"),
+        for value, values_key in (
+            (
+                review.grading_fairness_rating or review.overall_rating,
+                "sweetness_values",
+            ),
+            (
+                review.difficulty_rating or review.workload_rating,
+                "hardness_values",
+            ),
         ):
-            value = _as_float(row.get(key))
-            if value is not None:
-                bucket[values_key].append(value)
-        for tag in row.get("tags") or []:
+            numeric_value = _as_float(value)
+            if numeric_value is not None:
+                bucket[values_key].append(numeric_value)
+        for tag in review.tags or []:
             if tag not in bucket["review_tags"]:
                 bucket["review_tags"].append(tag)
-        created_at = str(row.get("created_at") or "")
-        if row.get("ai_summary") and created_at >= bucket["latest_created_at"]:
-            bucket["ai_summary"] = row.get("ai_summary")
-            bucket["latest_created_at"] = created_at
 
     course_ids = list(summaries_by_course.keys())
-    course_query = _course_query_base(client).in_("id", course_ids)
+    course_query = select(Course).where(Course.id.in_(course_ids))
     if department_id is not None:
-        course_query = course_query.eq("department_id", str(department_id))
+        course_query = course_query.where(Course.department_id == department_id)
     if weekday:
         weekday_filters = [
-            f"description.ilike.%{_safe_search_text(term)}%"
+            Course.description.ilike(f"%{_safe_search_text(term)}%")
             for term in _weekday_terms(weekday)
             if _safe_search_text(term)
         ]
         if weekday_filters:
-            course_query = course_query.or_(",".join(weekday_filters))
+            course_query = course_query.where(or_(*weekday_filters))
 
-    course_response = course_query.range(offset, offset + limit - 1).execute()
+    courses = list(db.scalars(course_query.offset(offset).limit(limit)))
     results: list[CourseFilterItem] = []
-    for row in course_response.data or []:
-        course_item = _course_item_from_row(row)
-        stats = summaries_by_course.get(str(row["id"]), {})
-
-        def average(values_key: str) -> float | None:
-            values = stats.get(values_key) or []
-            return round(sum(values) / len(values), 2) if values else None
+    for course in courses:
+        course_item = _course_item_from_course(course)
+        stats = summaries_by_course.get(course.id, {})
 
         results.append(
             CourseFilterItem(
                 **course_item.model_dump(),
-                sweetness=average("sweetness_values"),
-                hardness=average("hardness_values"),
-                chillness=average("chillness_values"),
-                ai_summary=stats.get("ai_summary"),
+                sweetness=_average(stats.get("sweetness_values") or []),
+                hardness=_average(stats.get("hardness_values") or []),
+                chillness=None,
+                ai_summary=None,
                 review_tags=stats.get("review_tags") or [],
                 review_count=int(stats.get("review_count") or 0),
             )
