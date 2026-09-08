@@ -29,6 +29,7 @@ from app.security.rate_limit import RedisRateLimiter
 from app.retrieval.reranker import get_ranker
 from app.realtime.notifications import notification_broker
 from app.realtime.routes import router as realtime_router
+from app.revision import deployed_revision, log_revision_configuration
 from app.vector_index_health import check_vector_indexes
 from app.visual_ingestion.service import OpenAIVisualParser
 
@@ -51,6 +52,12 @@ async def lifespan(application: FastAPI):
     application.state.notification_broker = notification_broker
     application.state.visual_ingestion_parser = None
     visual_ingestion_parser: OpenAIVisualParser | None = None
+
+    # Startup is the only place this can be reported. `/version` answers per
+    # request and must stay silent about a bad value, so a variable set to
+    # something that is not a commit SHA would otherwise look identical to one
+    # that was never set.
+    log_revision_configuration()
 
     redis_url = getenv("REDIS_URL")
     if redis_url:
@@ -198,6 +205,33 @@ async def liveness_probe() -> dict[str, str]:
     probes it.
     """
     return {"status": "alive"}
+
+
+@app.get("/version", tags=["system"])
+async def deployed_revision_probe() -> dict[str, str | None]:
+    """Report which commit this process was built from, and nothing else.
+
+    A third route rather than a field on either health route, because both of
+    those payloads are contracts something already reads: the container gate
+    parses ``/livez``, and ``HA_DR_RUNBOOK.md`` reads ``/health``'s
+    ``read_only`` and ``degraded`` states. Adding to either is a change to a
+    contract; a different question gets its own payload.
+
+    The three answers, and what each one settles:
+
+    * **404** -- the running build predates this route. That is itself a
+      revision fact: whatever is deployed is older than this commit.
+    * ``{"revision": null}`` -- this build or a later one is deployed, and
+      ``RENDER_GIT_COMMIT`` is either unset or not a commit SHA. The startup
+      log says which.
+    * ``{"revision": "<sha>"}`` -- the exact commit.
+
+    Like ``/livez`` this route is unauthenticated, so it does not decide what
+    is safe to publish; ``app/revision.py`` does, by returning nothing that is
+    not hexadecimal.
+    """
+
+    return {"revision": deployed_revision()}
 
 
 @app.get("/health", tags=["system"])
