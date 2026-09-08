@@ -70,6 +70,15 @@ Configure these only in the backend service's secret/environment settings.
   `nckuall-api`.
 - `APP_ENV` (required): `production`, `staging`, or `development`.
 - `LOG_LEVEL` (recommended): Usually `INFO` in production.
+- `RENDER_GIT_COMMIT` (platform-provided): Render sets this to the deployed
+  commit SHA, at build time and at runtime, with nothing to configure.
+  `GET /version` publishes it so an operator can tell which revision is
+  running; see `backend/OBSERVABILITY.md`. On a host that is not Render, set it
+  by hand to a full or abbreviated SHA, or leave it unset and accept
+  `{"revision": null}`. Only 7-40 hexadecimal characters are ever published:
+  anything else reports `null` and is logged once at startup, without its
+  value, so a variable filled in with the wrong thing cannot be read back out
+  of an unauthenticated route.
 - `SENTRY_DSN` (required for monitoring): Backend Sentry project DSN. Keep it
   in the backend service environment.
 - `SENTRY_ENVIRONMENT` (recommended): Match the deployment environment.
@@ -164,6 +173,9 @@ Deploy the backend before the frontend so `NEXT_PUBLIC_API_BASE_URL` always
 points to a healthy API. Validate `/health`, `/docs`, a public GET route,
 Supabase Google login, an NCKU-authorized review POST, and `/api/chat` after
 deployment.
+
+Check `/version` first. It says whether the build you are validating is the one
+you deployed, and every check below it is misleading if it is not.
 
 For migration lock safety and pgBouncer transaction-mode caveats, see
 `backend/DATABASE_OPERATIONS.md`.

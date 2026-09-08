@@ -76,6 +76,15 @@ jobs:
         working-directory: backend
         run: pytest tests/test_health_gate_contract.py
 
+      # Same again for the deployed-revision route. It is what tells an
+      # operator whether a merge actually reached the service, so a failure
+      # here needs its own name rather than a line in the integration run --
+      # and the leak guards it carries (an unauthenticated route must publish
+      # a commit SHA or nothing) should report even when Postgres is down.
+      - name: Verify the deployed revision contract
+        working-directory: backend
+        run: pytest tests/test_deployed_revision_contract.py
+
       # And again for the image's baked reranker cache: the build downloads the
       # model so that startup never has to, and the ARG, the ENV and the code
       # fallback that keep that true sit in two files. File reads only, so this
